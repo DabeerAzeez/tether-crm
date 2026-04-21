@@ -1,0 +1,82 @@
+/* Tether — Personal CRM custom styles */
+
+html, body, #root { height: 100%; }
+
+/* Leaflet tweaks */
+.leaflet-container {
+  font-family: inherit;
+  background: #e9e3d6;
+}
+.dark .leaflet-container { background: #2a2620; }
+.leaflet-popup-content-wrap {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(46, 35, 27, 0.18);
+}
+.leaflet-control-attribution { font-size: 10px; }
+
+/* Category pin */
+.tether-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+}
+.tether-pin .inner {
+  transform: rotate(45deg);
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(109, 82, 56, 0.25); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(109, 82, 56, 0.5); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Fade for drawer */
+.drawer-backdrop { backdrop-filter: blur(2px); }
+
+/* Pulsing dot for nudge */
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.pulse-dot { animation: gentle-pulse 2.2s ease-in-out infinite; }
+
+/* Subtle grid for empty states */
+.dotted-grid {
+  background-image: radial-gradient(circle, rgba(109, 82, 56, 0.12) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Walkthrough tooltip arrow */
+.tt-arrow::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+/* Chat bubbles */
+.bubble-user { background: #63854e; color: #fbf8f4; border-radius: 18px 18px 4px 18px; }
+.bubble-bot { background: #f4ede0; color: #2e231b; border-radius: 18px 18px 18px 4px; }
+
+/* Smoother focus */
+button:focus, input:focus, select:focus, textarea:focus { outline: none; }
+button, a { transition: all 120ms ease; }
+
+/* Markdown-ish note rendering */
+.note p { margin: 0 0 0.5rem; }
+.note strong { font-weight: 600; color: #4d3a29; }
+
+/* Dark-theme adjustments */
+.dark body { background-color: #1b1712; color: #f4ede0; }
+.dark .bubble-bot { background: #2d2821; color: #f4ede0; }
