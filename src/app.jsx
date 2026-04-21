@@ -20,13 +20,9 @@ const saveClientId = (id) => {
   try { localStorage.setItem(CLIENT_ID_KEY, id); } catch (e) { }
 };
 
-const RESERVED_CATEGORIES = [
-  { key: 'close', label: 'CRM: Close Friends', color: 'var(--cat-close)', bg: 'var(--cat-close-bg)', border: 'var(--cat-close-border)' },
-  { key: 'casual', label: 'CRM: Casual Friends', color: 'var(--cat-casual)', bg: 'var(--cat-casual-bg)', border: 'var(--cat-casual-border)' },
-  { key: 'professional', label: 'CRM: Professional', color: 'var(--cat-professional)', bg: 'var(--cat-professional-bg)', border: 'var(--cat-professional-border)' },
-  { key: 'family', label: 'CRM: Family', color: 'var(--cat-family)', bg: 'var(--cat-family-bg)', border: 'var(--cat-family-border)' },
-  { key: 'other', label: 'CRM: Other', color: 'var(--cat-other)', bg: 'var(--cat-other-bg)', border: 'var(--cat-other-border)' },
-];
+// Tether no longer imposes its own category taxonomy — users organize contacts with the labels
+// they already have in Google Contacts (plus any custom categories they create).
+const RESERVED_CATEGORIES = [];
 
 const daysSince = (iso) => {
   if (!iso) return Infinity;
@@ -75,8 +71,7 @@ const importanceScore = (c) => {
   let s = 0;
   if (c.googleLabels.length > 0) s += 2;
   if (c.crmLabels.length > 0) s += 5;
-  if (c.crmLabels.includes('CRM: Close Friends')) s += 10;
-  if (c.crmLabels.includes('CRM: Family')) s += 8;
+  if (c.nudgeFrequencyDays != null) s += 10; // user cares enough to set a nudge
   // Recent interactions boost
   if (c.lastContactedDaysAgo < 30) s += 5;
   else if (c.lastContactedDaysAgo < 90) s += 2;
@@ -374,7 +369,7 @@ function AppProvider({ children }) {
           ...c,
           interactions: [entry, ...c.interactions],
           lastContactedAt: iso,
-          lastContactedDaysAgo: 0,
+          lastContactedDaysAgo: daysSince(iso),
         } : c);
       // Also surface on Calendar tab as a synthetic "Personal CRM" event
       const syntheticEvent = {
@@ -700,13 +695,12 @@ function SyncProgress() {
         setStage('Done');
         await new Promise((r) => setTimeout(r, 500));
 
-        const hasLabels = contacts.some((c) => c.googleLabels.length > 0);
         setState((s) => ({
           ...s,
           contacts,
           events,
           lastSyncAt: new Date().toISOString(),
-          phase: hasLabels ? 'setup-mapping' : 'setup-closefriends',
+          phase: 'walkthrough',
         }));
       } catch (e) {
         console.error('Sync failed:', e);
@@ -1547,7 +1541,7 @@ function LogInteractionModal() {
   };
 
   return (
-    <Modal open={!!logForId} onClose={closeLog} title={`Log interaction with ${mainContact?.name}`} size="md">
+    <Modal open={!!logForId} onClose={closeLog} title={`Add an interaction with ${mainContact?.name}`} size="md">
       <div className="p-6 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
@@ -1605,7 +1599,7 @@ function LogInteractionModal() {
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-warm-200">
           <Button variant="ghost" onClick={closeLog}>Cancel</Button>
-          <Button onClick={submit}>Log interaction</Button>
+          <Button onClick={submit}>Add interaction</Button>
         </div>
       </div>
 
@@ -1627,23 +1621,40 @@ function LogInteractionModal() {
 // RECONNECT TAB
 // ───────────────────────────────────────────────────────────────────
 
+// Nudge days = nudgeFrequencyDays - daysSinceLastContact.
+// A positive value means you're on track (green); the contact still has time before you're due to
+// reach out. A negative value means you've fallen behind — the nudge deadline has passed and you
+// owe them a message. Cards are sorted ascending by nudge days so the most overdue appear first.
+// The left-side color bar maps nudge days to a red→green gradient (clamped to ±30 days).
+const nudgeDaysColor = (daysRemaining) => {
+  if (daysRemaining == null) return 'transparent';
+  const clamped = Math.max(-30, Math.min(30, daysRemaining));
+  const hue = Math.round(((clamped + 30) / 60) * 120); // -30 → hue 0 (red), +30 → hue 120 (green)
+  return `hsl(${hue}, 65%, 48%)`;
+};
+
 function ReconnectTab() {
   const { state, setState } = useApp();
   const { open: openDrawer, openLog } = useDrawer();
+  const [addOpen, setAddOpen] = useState(false);
 
-  const closeFriends = useMemo(() =>
-    state.contacts
-      .filter((c) => c.crmLabels.includes('CRM: Close Friends'))
-      .sort((a, b) => (b.lastContactedDaysAgo || 0) - (a.lastContactedDaysAgo || 0)),
-    [state.contacts]
-  );
-
-  const anyNudgeSet = state.contacts.some((c) => c.nudgeFrequencyDays != null);
-
-  const recent = useMemo(() => {
-    const allLogs = [];
-    state.contacts.forEach((c) => c.interactions.forEach((i) => allLogs.push({ ...i, contact: c })));
-    return allLogs.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
+  // The Catch Up list is anyone with a nudge frequency set — the user opts a contact in
+  // explicitly, regardless of which Google/custom category they belong to.
+  // Sort ascending by nudge days remaining (most overdue first). Contacts with no logged
+  // interactions (daysAgo === Infinity) sort above everyone as an error/empty state.
+  const catchUp = useMemo(() => {
+    return state.contacts
+      .filter((c) => c.nudgeFrequencyDays != null)
+      .map((c) => {
+        const daysAgo = c.lastContactedAt ? daysSince(c.lastContactedAt) : (c.lastContactedDaysAgo ?? Infinity);
+        const noHistory = daysAgo === Infinity;
+        const daysRemaining = noHistory ? null : c.nudgeFrequencyDays - daysAgo;
+        return { ...c, _daysAgo: daysAgo, _daysRemaining: daysRemaining, _noHistory: noHistory };
+      })
+      .sort((a, b) => {
+        if (a._noHistory !== b._noHistory) return a._noHistory ? -1 : 1;
+        return (a._daysRemaining ?? Infinity) - (b._daysRemaining ?? Infinity);
+      });
   }, [state.contacts]);
 
   const upcoming = useMemo(() =>
@@ -1654,41 +1665,6 @@ function ReconnectTab() {
     [state.events]
   );
 
-  const groupCheckIns = useMemo(() => {
-    return Object.entries(state.nudges.groupCadence).map(([key, days]) => {
-      const cat = RESERVED_CATEGORIES.find((c) => c.key === key);
-      if (!cat) return null;
-      const inCat = state.contacts.filter((c) => c.crmLabels.includes(cat.label));
-      if (inCat.length === 0) return null;
-      const lastConnected = inCat.reduce((min, c) => Math.min(min, c.lastContactedDaysAgo), Infinity);
-      const overdue = lastConnected > days;
-      return { cat, days, lastConnected, overdue };
-    }).filter(Boolean);
-  }, [state.contacts, state.nudges.groupCadence]);
-
-  if (!anyNudgeSet) {
-    return (
-      <div className="p-8 flex items-center justify-center min-h-[60vh]">
-        <Card className="max-w-xl w-full p-10 text-center dotted-grid">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sage-100 text-sage-700 mb-4">
-            {Icons.reconnect}
-          </div>
-          <h2 className="font-serif text-2xl text-warm-900 mb-2">Nothing to reconnect on yet</h2>
-          <p className="text-warm-700 mb-6">Set a nudge frequency for at least one contact and this tab will start suggesting people to reach out to.</p>
-          <div className="flex items-center justify-center gap-3">
-            <Button onClick={() => {
-              // Open first close friend drawer quickly
-              const first = state.contacts.find((c) => c.crmLabels.includes('CRM: Close Friends'));
-              if (first) openDrawer(first.id);
-              else setState((s) => ({ ...s, activeTab: 'contacts' }));
-            }}>Set a nudge for a close friend</Button>
-            <Button variant="secondary" onClick={() => setState((s) => ({ ...s, activeTab: 'contacts' }))}>Go to All Contacts</Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
       <div>
@@ -1697,34 +1673,84 @@ function ReconnectTab() {
       </div>
 
       <section>
-        <SectionHeader sub={`${closeFriends.length} close friends — sorted by who you haven't caught up with most recently`}>
-          Close friends to catch up with
-        </SectionHeader>
-        {closeFriends.length === 0 ? (
-          <Card className="p-6 text-sm text-warm-600 italic">No close friends yet. Add <strong>CRM: Close Friends</strong> to a contact from All Contacts.</Card>
+        <div className="flex items-end justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-serif text-xl text-warm-900">Catch Up</h2>
+            <p className="text-sm text-warm-600 mt-0.5">
+              {catchUp.length === 0
+                ? 'Add contacts you want to stay in touch with.'
+                : `${catchUp.length} ${catchUp.length === 1 ? 'contact' : 'contacts'} — sorted by urgency`}
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setAddOpen(true)}>+ Add contacts</Button>
+        </div>
+
+        {catchUp.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center min-h-[288px] text-center p-8">
+            <p className="text-warm-700 mb-4">Your catch up list is empty. Add contacts — or a whole group of them — and set how often you want to be nudged.</p>
+            <Button onClick={() => setAddOpen(true)}>+ Add contacts</Button>
+          </Card>
         ) : (
           <div className="grid gap-2">
-            {closeFriends.map((c) => {
-              const overdue = c.nudgeFrequencyDays && c.lastContactedDaysAgo > c.nudgeFrequencyDays;
-              const color = colorFor(c, state.customCategories);
+            {catchUp.map((c) => {
+              const overdue = !c._noHistory && c._daysRemaining < 0;
+              const errorState = c._noHistory; // no interactions logged yet
+              const cats = categoriesFor(c, state.customCategories);
+              const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
+              const barColor = errorState ? 'hsl(0, 65%, 48%)' : nudgeDaysColor(c._daysRemaining);
+
+              const lastContactedText = errorState
+                ? 'No interactions logged yet'
+                : `Last contacted ${relativeDate(c.lastContactedAt)}`;
+
+              let statusText;
+              if (errorState) {
+                statusText = `No recent interactions (nudge every ${c.nudgeFrequencyDays} days)`;
+              } else if (overdue) {
+                statusText = `${Math.abs(Math.round(c._daysRemaining))} days overdue (nudge every ${c.nudgeFrequencyDays} days)`;
+              } else {
+                statusText = `${Math.round(c._daysRemaining)} days until nudge (nudge every ${c.nudgeFrequencyDays} days)`;
+              }
+
+              const emphasized = overdue || errorState;
+
               return (
-                <Card key={c.id} className="p-4 flex items-center gap-4 hover:shadow-md transition cursor-pointer" >
-                  <div onClick={() => openDrawer(c.id)} className="flex items-center gap-4 flex-1 min-w-0">
-                    <Avatar contact={c} size={44} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-warm-900 truncate">{c.name}</span>
-                        <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-                        {overdue && <span className="pulse-dot w-2 h-2 rounded-full bg-amber-500" title="Overdue" />}
-                      </div>
-                      <div className="text-xs text-warm-600">
-                        Last contacted {relativeDate(c.lastContactedAt)}
-                        {c.nudgeFrequencyDays && ` · nudge every ${c.nudgeFrequencyDays}d`}
-                        {c.location?.city && ` · ${c.location.city}`}
+                <Card
+                  key={c.id}
+                  className="group flex items-stretch overflow-hidden hover:shadow-md transition cursor-pointer"
+                >
+                  <div style={{ width: 5, background: barColor, flexShrink: 0 }} />
+                  <div className="p-4 flex items-center gap-4 flex-1 min-w-0 relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setState((s) => ({
+                          ...s,
+                          contacts: s.contacts.map((x) => x.id === c.id ? { ...x, nudgeFrequencyDays: null } : x),
+                        }));
+                      }}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full bg-warm-200 hover:bg-warm-300 text-warm-600 hover:text-warm-900 text-xs leading-none"
+                      title="Remove from catch up"
+                    >×</button>
+                    <div onClick={() => openDrawer(c.id)} className="flex items-center gap-4 flex-1 min-w-0">
+                      <Avatar contact={c} size={44} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`truncate ${emphasized ? 'font-bold text-warm-900' : 'font-medium text-warm-900'}`}>{c.name}</span>
+                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
+                          {googleLabels.map((l) => <Tag key={l} label={l} />)}
+                        </div>
+                        <div className="text-xs text-warm-600 mt-0.5">
+                          {lastContactedText}
+                          {c.location?.city && ` · ${c.location.city}`}
+                        </div>
+                        <div className={`text-xs font-medium mt-0.5 ${errorState ? 'text-red-700' : overdue ? 'text-amber-700' : 'text-warm-500'}`}>
+                          {statusText}
+                        </div>
                       </div>
                     </div>
+                    <Button size="sm" variant="secondary" onClick={() => openLog(c.id)}>Add an interaction</Button>
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => openLog(c.id)}>Log interaction</Button>
                 </Card>
               );
             })}
@@ -1732,58 +1758,156 @@ function ReconnectTab() {
         )}
       </section>
 
-      {groupCheckIns.length > 0 && (
-        <section>
-          <SectionHeader sub="Based on cadences you set in Settings → Nudges">Category check-ins</SectionHeader>
-          <div className="grid md:grid-cols-2 gap-3">
-            {groupCheckIns.map(({ cat, days, lastConnected, overdue }) => (
-              <Card key={cat.key} className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <CategoryPill category={cat} />
-                  {overdue && <span className="text-xs text-amber-700">Overdue</span>}
-                </div>
-                <p className="text-sm text-warm-700">
-                  {overdue
-                    ? `You haven't connected with anyone in ${cat.label.replace(/^CRM:\s*/, '')} in ${lastConnected} days (target: every ${days}).`
-                    : `Last connected ${lastConnected} days ago (target: every ${days}).`}
-                </p>
-              </Card>
+      <AddToCatchUpModal open={addOpen} onClose={() => setAddOpen(false)} />
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ADD-TO-CATCH-UP MODAL
+// ───────────────────────────────────────────────────────────────────
+// Lets users bulk-add contacts to the Catch Up list by setting a shared nudge frequency.
+// Supports searching by name and filtering by label (Google label or custom category),
+// so you can e.g. add every "Improv Members" contact at once with a 20-day nudge.
+
+function AddToCatchUpModal({ open, onClose }) {
+  const { state, setState } = useApp();
+  const [search, setSearch] = useState('');
+  const [filterLabel, setFilterLabel] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [nudgeDays, setNudgeDays] = useState(30);
+
+  useEffect(() => {
+    if (open) {
+      setSearch('');
+      setFilterLabel(null);
+      setSelected(new Set());
+      setNudgeDays(30);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  // Only show contacts not already on the catch-up list
+  const eligible = state.contacts.filter((c) => c.nudgeFrequencyDays == null);
+
+  // All distinct labels across eligible contacts (Google labels + custom CRM labels, minus the
+  // legacy "CRM:" reserved prefixes which no longer exist)
+  const labelCounts = {};
+  eligible.forEach((c) => {
+    c.googleLabels.filter((l) => !l.startsWith('CRM:')).forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
+    c.crmLabels.forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
+  });
+  const allLabels = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
+
+  const visible = eligible.filter((c) => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterLabel) {
+      const has = c.googleLabels.includes(filterLabel) || c.crmLabels.includes(filterLabel);
+      if (!has) return false;
+    }
+    return true;
+  });
+
+  const toggleContact = (id) => {
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const selectAllVisible = () => setSelected(new Set(visible.map((c) => c.id)));
+  const clearSelection = () => setSelected(new Set());
+
+  const apply = () => {
+    const ids = Array.from(selected);
+    const days = Number(nudgeDays);
+    if (ids.length === 0 || !days || days < 1) return;
+    setState((s) => ({
+      ...s,
+      contacts: s.contacts.map((c) => ids.includes(c.id) ? { ...c, nudgeFrequencyDays: days } : c),
+    }));
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add to Catch Up" size="lg">
+      <div className="p-6 space-y-4">
+        <div className="flex gap-3 items-end flex-wrap">
+          <label className="flex-1 min-w-[200px]">
+            <span className="text-xs text-warm-600">Search</span>
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search contacts…"
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
+          </label>
+          <label>
+            <span className="text-xs text-warm-600">Nudge every</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input type="number" min="1" value={nudgeDays}
+                onChange={(e) => setNudgeDays(e.target.value)}
+                className="w-20 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
+              <span className="text-sm text-warm-600">days</span>
+            </div>
+          </label>
+        </div>
+
+        {allLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
+            <button onClick={() => setFilterLabel(null)}
+              className={`text-xs px-2 py-1 rounded-full transition ${filterLabel == null ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+              All
+            </button>
+            {allLabels.map((l) => (
+              <button key={l} onClick={() => setFilterLabel(filterLabel === l ? null : l)}
+                className={`text-xs px-2 py-1 rounded-full transition ${filterLabel === l ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+                {l.replace(/^CRM:\s*/, '')} <span className="opacity-60">· {labelCounts[l]}</span>
+              </button>
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <section>
-          <SectionHeader>Recent activity</SectionHeader>
-          <Card className="divide-y divide-warm-100">
-            {recent.length === 0 && <div className="p-4 text-sm text-warm-600 italic">No logged interactions yet.</div>}
-            {recent.map((i) => (
-              <div key={i.id} className="p-3 flex items-center gap-3 hover:bg-warm-50 cursor-pointer" onClick={() => openDrawer(i.contact.id)}>
-                <Avatar contact={i.contact} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-warm-900 truncate"><span className="font-medium">{i.contact.name}</span> · {i.type}</div>
-                  <div className="text-xs text-warm-600">{relativeDate(i.date)}</div>
+        <div className="flex items-center justify-between text-xs text-warm-600">
+          <span>{visible.length} matching · {selected.size} selected</span>
+          <div className="flex gap-3">
+            <button onClick={selectAllVisible} className="underline hover:text-warm-900" disabled={visible.length === 0}>Select all visible</button>
+            {selected.size > 0 && <button onClick={clearSelection} className="underline hover:text-warm-900">Clear</button>}
+          </div>
+        </div>
+
+        <div className="max-h-[40vh] overflow-y-auto border border-warm-200 rounded-lg divide-y divide-warm-100 bg-surface">
+          {visible.length === 0 && <div className="p-4 text-sm text-warm-600 italic">No contacts match.</div>}
+          {visible.map((c) => {
+            const isSelected = selected.has(c.id);
+            const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
+            return (
+              <button key={c.id} onClick={() => toggleContact(c.id)}
+                className={`w-full flex items-center gap-3 p-3 text-left transition ${isSelected ? 'bg-sage-50' : 'hover:bg-warm-50'}`}>
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-sage-500 border-sage-500' : 'border-warm-300'}`}>
+                  {isSelected && <div className="text-white scale-75">{Icons.check}</div>}
                 </div>
-              </div>
-            ))}
-          </Card>
-        </section>
+                <Avatar contact={c} size={36} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
+                  <div className="text-xs text-warm-600 truncate">
+                    {googleLabels.slice(0, 4).join(', ')}
+                    {c.location?.city && `${googleLabels.length ? ' · ' : ''}${c.location.city}`}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
-        <section>
-          <SectionHeader sub="From your calendar">Upcoming</SectionHeader>
-          <Card className="divide-y divide-warm-100">
-            {upcoming.length === 0 && <div className="p-4 text-sm text-warm-600 italic">Nothing upcoming.</div>}
-            {upcoming.map((e) => (
-              <div key={e.id} className="p-3">
-                <div className="text-sm text-warm-900 font-medium">{e.title}</div>
-                <div className="text-xs text-warm-600">{formatShort(e.start)}{e.location ? ` · ${e.location}` : ''}</div>
-              </div>
-            ))}
-          </Card>
-        </section>
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-warm-200">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={apply} disabled={selected.size === 0 || !nudgeDays || nudgeDays < 1}>
+            Add {selected.size > 0 ? `${selected.size} ` : ''}{selected.size === 1 ? 'contact' : 'contacts'}
+          </Button>
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2638,7 +2762,7 @@ function HelpTab() {
         <p className="text-warm-600 mt-1">Docs, shortcuts, and onboarding controls.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => setState((s) => ({ ...s, phase: 'setup-mapping' }))}>Restart onboarding</Button>
+        <Button variant="secondary" onClick={() => setState((s) => ({ ...s, phase: 'walkthrough' }))}>Restart onboarding</Button>
         <Button variant="secondary" onClick={() => setState((s) => ({ ...s, phase: 'walkthrough' }))}>Rerun dashboard walkthrough</Button>
         <Button variant="ghost">
           <a href="https://github.com/" target="_blank" rel="noreferrer">GitHub repo ↗</a>
