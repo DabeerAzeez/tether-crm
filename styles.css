@@ -1,16 +1,126 @@
-/* Tether — Personal CRM custom styles */
+:root {
+  /* Warm Earthy Scale (Light) */
+  --warm-50: #fbf8f4;
+  --warm-100: #f4ede0;
+  --warm-200: #e8dac1;
+  --warm-300: #d8c19b;
+  --warm-400: #c3a375;
+  --warm-500: #a98458;
+  --warm-600: #8c6a45;
+  --warm-700: #6d5238;
+  --warm-800: #4d3a29;
+  --warm-900: #2e231b;
+
+  /* Sage/Nature Scale (Light) */
+  --sage-50: #f4f7f2;
+  --sage-100: #e6ede1;
+  --sage-200: #cddbc5;
+  --sage-300: #a9c097;
+  --sage-400: #83a26d;
+  --sage-500: #63854e;
+  --sage-600: #4d6a3d;
+  --sage-700: #3e5432;
+  --sage-800: #34442c;
+  --sage-900: #2c3826;
+
+  /* Surface & Accents */
+  --white: #ffffff;
+  --shadow: rgba(46, 35, 27, 0.08);
+
+  /* Categories (Light) */
+  --cat-close: #c86b3a;
+  --cat-close-bg: rgba(200, 107, 58, 0.1);
+  --cat-close-border: rgba(200, 107, 58, 0.2);
+
+  --cat-casual: #d9a441;
+  --cat-casual-bg: rgba(217, 164, 65, 0.1);
+  --cat-casual-border: rgba(217, 164, 65, 0.2);
+
+  --cat-professional: #4b7a8c;
+  --cat-professional-bg: rgba(75, 122, 140, 0.1);
+  --cat-professional-border: rgba(75, 122, 140, 0.2);
+
+  --cat-family: #7a9b64;
+  --cat-family-bg: rgba(122, 155, 100, 0.1);
+  --cat-family-border: rgba(122, 155, 100, 0.2);
+
+  --cat-other: #8d7a9b;
+  --cat-other-bg: rgba(141, 122, 155, 0.1);
+  --cat-other-border: rgba(141, 122, 155, 0.2);
+
+  --cat-multi: #5b3a8c;
+}
+
+.dark {
+  /* Earthy Dark Scale (Deep Browns/Greys) */
+  --warm-50: #12100e;   /* Obsidian Earth */
+  --warm-100: #1c1916;  /* Deep Coffee */
+  --warm-200: #2a2622;  /* Roasted Earth */
+  --warm-300: #3d3630;  /* Bark */
+  --warm-400: #4d443a;  /* Clay */
+  --warm-500: #8c6a45;  /* Ochre */
+  --warm-600: #a98458;  /* Tan */
+  --warm-700: #c3a375;  /* Sand */
+  --warm-800: #e8dac1;  /* Flax */
+  --warm-900: #fbf8f4;  /* Shell (Light Text) */
+
+  /* Nature Dark Scale (Deep Greens) */
+  --sage-50: #1a2218;
+  --sage-100: #232e1f;
+  --sage-200: #2d3b28;
+  --sage-300: #3e5432;
+  --sage-400: #4d6a3d;
+  --sage-500: #63854e;
+  --sage-600: #83a26d;
+  --sage-700: #a9c097;
+  --sage-800: #cddbc5;
+  --sage-900: #e6ede1;
+
+  --white: #1c1916;  /* Card Background in Dark Mode */
+  --shadow: rgba(0, 0, 0, 0.4);
+
+  /* Categories (Optimized for Dark) */
+  --cat-close: #f0a881;
+  --cat-close-bg: rgba(240, 168, 129, 0.15);
+  --cat-close-border: rgba(240, 168, 129, 0.3);
+
+  --cat-casual: #f5d18a;
+  --cat-casual-bg: rgba(245, 209, 138, 0.15);
+  --cat-casual-border: rgba(245, 209, 138, 0.3);
+
+  --cat-professional: #8cc4d9;
+  --cat-professional-bg: rgba(140, 196, 217, 0.15);
+  --cat-professional-border: rgba(140, 196, 217, 0.3);
+
+  --cat-family: #b6d4a1;
+  --cat-family-bg: rgba(182, 212, 161, 0.15);
+  --cat-family-border: rgba(182, 212, 161, 0.3);
+
+  --cat-other: #ccbad9;
+  --cat-other-bg: rgba(204, 186, 217, 0.15);
+  --cat-other-border: rgba(204, 186, 217, 0.3);
+
+  --cat-multi: #b196d9;
+}
 
 html, body, #root { height: 100%; }
+
+/* Global transitions for theme switching */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.1s ease;
+}
 
 /* Leaflet tweaks */
 .leaflet-container {
   font-family: inherit;
-  background: #e9e3d6;
+  background: var(--warm-200);
 }
-.dark .leaflet-container { background: #2a2620; }
+.dark .leaflet-container { background: var(--warm-50); }
 .leaflet-popup-content-wrap {
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(46, 35, 27, 0.18);
+  box-shadow: 0 8px 24px var(--shadow);
+  background: var(--white);
+  color: var(--warm-900);
 }
 .leaflet-control-attribution { font-size: 10px; }
 
@@ -24,7 +134,7 @@ html, body, #root { height: 100%; }
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid white;
+  border: 2px solid var(--white);
 }
 .tether-pin .inner {
   transform: rotate(45deg);
@@ -35,8 +145,8 @@ html, body, #root { height: 100%; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(109, 82, 56, 0.25); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(109, 82, 56, 0.5); }
+::-webkit-scrollbar-thumb { background: var(--warm-300); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--warm-400); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* Fade for drawer */
@@ -51,8 +161,9 @@ html, body, #root { height: 100%; }
 
 /* Subtle grid for empty states */
 .dotted-grid {
-  background-image: radial-gradient(circle, rgba(109, 82, 56, 0.12) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--warm-300) 1px, transparent 1px);
   background-size: 16px 16px;
+  opacity: 0.4;
 }
 
 /* Walkthrough tooltip arrow */
@@ -66,8 +177,8 @@ html, body, #root { height: 100%; }
 }
 
 /* Chat bubbles */
-.bubble-user { background: #63854e; color: #fbf8f4; border-radius: 18px 18px 4px 18px; }
-.bubble-bot { background: #f4ede0; color: #2e231b; border-radius: 18px 18px 18px 4px; }
+.bubble-user { background: var(--sage-500); color: var(--warm-50); border-radius: 18px 18px 4px 18px; }
+.bubble-bot { background: var(--warm-100); color: var(--warm-900); border-radius: 18px 18px 18px 4px; }
 
 /* Smoother focus */
 button:focus, input:focus, select:focus, textarea:focus { outline: none; }
@@ -75,8 +186,6 @@ button, a { transition: all 120ms ease; }
 
 /* Markdown-ish note rendering */
 .note p { margin: 0 0 0.5rem; }
-.note strong { font-weight: 600; color: #4d3a29; }
+.note strong { font-weight: 600; color: var(--warm-800); }
 
-/* Dark-theme adjustments */
-.dark body { background-color: #1b1712; color: #f4ede0; }
-.dark .bubble-bot { background: #2d2821; color: #f4ede0; }
+

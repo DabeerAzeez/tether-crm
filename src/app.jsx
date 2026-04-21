@@ -9,7 +9,7 @@ const { useState, useEffect, useMemo, useRef, useCallback, createContext, useCon
 
 const STORAGE_KEY = 'tether-state-v1';
 const CLIENT_ID_KEY = 'tether-google-client-id';
-const MULTI_COLOR = '#5b3a8c';
+const MULTI_COLOR = 'var(--cat-multi)';
 
 const loadClientId = () => {
   try {
@@ -21,11 +21,11 @@ const saveClientId = (id) => {
 };
 
 const RESERVED_CATEGORIES = [
-  { key: 'close', label: 'CRM: Close Friends', color: '#c86b3a' },
-  { key: 'casual', label: 'CRM: Casual Friends', color: '#d9a441' },
-  { key: 'professional', label: 'CRM: Professional', color: '#4b7a8c' },
-  { key: 'family', label: 'CRM: Family', color: '#7a9b64' },
-  { key: 'other', label: 'CRM: Other', color: '#8d7a9b' },
+  { key: 'close', label: 'CRM: Close Friends', color: 'var(--cat-close)', bg: 'var(--cat-close-bg)', border: 'var(--cat-close-border)' },
+  { key: 'casual', label: 'CRM: Casual Friends', color: 'var(--cat-casual)', bg: 'var(--cat-casual-bg)', border: 'var(--cat-casual-border)' },
+  { key: 'professional', label: 'CRM: Professional', color: 'var(--cat-professional)', bg: 'var(--cat-professional-bg)', border: 'var(--cat-professional-border)' },
+  { key: 'family', label: 'CRM: Family', color: 'var(--cat-family)', bg: 'var(--cat-family-bg)', border: 'var(--cat-family-border)' },
+  { key: 'other', label: 'CRM: Other', color: 'var(--cat-other)', bg: 'var(--cat-other-bg)', border: 'var(--cat-other-border)' },
 ];
 
 const daysSince = (iso) => {
@@ -186,8 +186,8 @@ const Icons = {
   google: <svg viewBox="0 0 48 48" className="w-5 h-5"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" /><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.1 35 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.6l6.2 5.2C41.3 34.8 44 29.8 44 24c0-1.2-.1-2.4-.4-3.5z" /></svg>,
   logo: (
     <svg viewBox="0 0 32 32" className="w-6 h-6">
-      <path d="M16 3c3 4 7 7 7 12a7 7 0 1 1-14 0c0-5 4-8 7-12z" fill="#63854e" />
-      <path d="M16 11v15" stroke="#4d3a29" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M16 3c3 4 7 7 7 12a7 7 0 1 1-14 0c0-5 4-8 7-12z" fill="var(--sage-500)" />
+      <path d="M16 11v15" stroke="var(--warm-800)" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
 };
@@ -247,21 +247,30 @@ const Button = ({ children, onClick, variant = 'primary', size = 'md', icon, cla
 };
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-warm-100 ${className}`}>{children}</div>
+  <div className={`bg-surface rounded-2xl shadow-sm border border-warm-100 ${className}`}>{children}</div>
 );
 
-const CategoryPill = ({ category, onRemove }) => (
-  <span
-    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-    style={{ background: `${category.color}1a`, color: category.color, border: `1px solid ${category.color}33` }}
-  >
-    <span className="w-2 h-2 rounded-full" style={{ background: category.color }} />
-    {category.label.replace(/^CRM:\s*/, '')}
-    {onRemove && (
-      <button onClick={onRemove} className="ml-1 opacity-60 hover:opacity-100">×</button>
-    )}
-  </span>
-);
+const CategoryPill = ({ category, onRemove }) => {
+  const isVar = category.color?.startsWith('var(');
+  const style = isVar ? {
+    background: category.bg,
+    color: category.color,
+    border: `1px solid ${category.border}`,
+  } : {
+    background: `${category.color}1a`,
+    color: category.color,
+    border: `1px solid ${category.color}33`,
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style={style}>
+      <span className="w-2 h-2 rounded-full" style={{ background: category.color }} />
+      {category.label.replace(/^CRM:\s*/, '')}
+      {onRemove && (
+        <button onClick={onRemove} className="ml-1 opacity-60 hover:opacity-100">×</button>
+      )}
+    </span>
+  );
+};
 
 const Tag = ({ label, onRemove }) => (
   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-warm-100 text-warm-700 border border-warm-200">
@@ -566,7 +575,7 @@ function SignInScreen() {
                   value={pendingId}
                   onChange={(e) => setPendingId(e.target.value)}
                   placeholder="123456789-abc.apps.googleusercontent.com"
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-warm-300 bg-white font-mono text-xs"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface font-mono text-xs"
                 />
               </label>
               {err && <div className="text-sm text-red-700">{err}</div>}
@@ -585,7 +594,7 @@ function SignInScreen() {
                     <li>Enable <strong>People API</strong> and <strong>Google Calendar API</strong> under APIs &amp; Services → Library.</li>
                     <li>Under APIs &amp; Services → OAuth consent screen, create an "External" app, add your Gmail as a test user, and add scopes: <code className="font-mono">/auth/contacts</code>, <code className="font-mono">/auth/calendar.readonly</code>, <code className="font-mono">profile</code>, <code className="font-mono">email</code>.</li>
                     <li>Under Credentials → Create Credentials → <strong>OAuth client ID</strong> → Web application. Add this origin to <em>Authorized JavaScript origins</em>:
-                      <div className="mt-1 font-mono bg-white px-2 py-1 rounded border border-warm-300 break-all">{origin || '(open this page via http/https first)'}</div>
+                      <div className="mt-1 font-mono bg-surface px-2 py-1 rounded border border-warm-300 break-all">{origin || '(open this page via http/https first)'}</div>
                     </li>
                     <li>Copy the Client ID and paste it above.</li>
                   </ol>
@@ -600,7 +609,7 @@ function SignInScreen() {
               <button
                 onClick={connectGoogle}
                 disabled={busy}
-                className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl border border-warm-300 bg-white hover:bg-warm-50 shadow-sm transition disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl border border-warm-300 bg-surface hover:bg-warm-50 shadow-sm transition disabled:opacity-60"
               >
                 {Icons.google}
                 <span className="font-medium text-warm-900">{busy ? 'Connecting…' : 'Sign in with Google'}</span>
@@ -808,7 +817,7 @@ function LabelMappingScreen() {
           <p className="text-warm-600 italic">No labels found. You'll pick close friends next.</p>
         )}
         {existingLabels.map((lbl) => (
-          <div key={lbl} className="flex items-center justify-between gap-4 p-3 bg-white rounded-xl border border-warm-200">
+          <div key={lbl} className="flex items-center justify-between gap-4 p-3 bg-surface rounded-xl border border-warm-200">
             <div className="flex items-center gap-3 min-w-0">
               <Tag label={lbl} />
               <span className="text-xs text-warm-500 whitespace-nowrap">{labelCounts[lbl]} contact{labelCounts[lbl] > 1 ? 's' : ''}</span>
@@ -884,7 +893,7 @@ function CloseFriendPicker() {
             <button
               key={c.id}
               onClick={() => toggle(c.id)}
-              className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${isOn ? 'bg-sage-50 border-sage-400' : 'bg-white border-warm-200 hover:border-warm-300'}`}
+              className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${isOn ? 'bg-sage-50 border-sage-400' : 'bg-surface border-warm-200 hover:border-warm-300'}`}
             >
               <Avatar contact={c} size={36} />
               <div className="flex-1 min-w-0">
@@ -934,7 +943,7 @@ function OnboardingShell({ step, title, subtitle, children }) {
             </Fragment>
           ))}
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-warm-100 p-8">
+        <div className="bg-surface rounded-2xl shadow-sm border border-warm-100 p-8">
           <h1 className="font-serif text-3xl text-warm-900 mb-2">{title}</h1>
           <p className="text-warm-700 mb-6">{subtitle}</p>
           {children}
@@ -1205,7 +1214,7 @@ function LocationAutocomplete({ value, onChange }) {
           onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
           placeholder="Type a city or place…"
-          className="w-full px-3 py-1.5 pr-8 rounded-lg border border-warm-300 bg-white text-sm focus:outline-none focus:border-sage-500"
+          className="w-full px-3 py-1.5 pr-8 rounded-lg border border-warm-300 bg-surface text-sm focus:outline-none focus:border-sage-500"
         />
         {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 text-xs animate-pulse">…</span>}
         {!loading && query && (
@@ -1213,7 +1222,7 @@ function LocationAutocomplete({ value, onChange }) {
         )}
       </div>
       {open && suggestions.length > 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-warm-200 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-surface border border-warm-200 rounded-xl shadow-xl overflow-hidden">
           {suggestions.map((item, i) => {
             const { city, sub } = fmt(item);
             return (
@@ -1336,7 +1345,7 @@ function ContactDrawer() {
               <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Log interaction</Button>
               {availableCats.length > 0 && (
                 <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
-                  className="px-3 py-1.5 rounded-lg border border-warm-300 bg-white text-sm" defaultValue="">
+                  className="px-3 py-1.5 rounded-lg border border-warm-300 bg-surface text-sm" defaultValue="">
                   <option value="">+ Add category</option>
                   {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
                 </select>
@@ -1364,7 +1373,7 @@ function ContactDrawer() {
                     <span className="w-20 text-warm-600 capitalize">{f}</span>
                     {edit ? (
                       <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" />
                     ) : <span className="text-warm-900">{contact[f] || '—'}</span>}
                   </div>
                 ))}
@@ -1393,7 +1402,7 @@ function ContactDrawer() {
                     <span className="w-20 text-warm-600 capitalize">{f}</span>
                     {edit ? (
                       <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" placeholder="Paste URL or handle" />
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" placeholder="Paste URL or handle" />
                     ) : contact[f] ? <span className="text-warm-900 truncate">{contact[f]}</span> : <span className="text-warm-500">—</span>}
                   </div>
                 ))}
@@ -1410,7 +1419,7 @@ function ContactDrawer() {
                     <span className="w-24 text-warm-600">{f === 'howWeMet' ? 'How we met' : f.charAt(0).toUpperCase() + f.slice(1)}</span>
                     {edit ? (
                       <input value={draft.custom?.[f] || ''} onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f]: e.target.value } })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" />
                     ) : <span className="text-warm-900">{contact.custom?.[f] || '—'}</span>}
                   </div>
                 ))}
@@ -1429,7 +1438,7 @@ function ContactDrawer() {
               <SectionHeader>Notes</SectionHeader>
               {edit ? (
                 <textarea value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                  rows={5} className="w-full p-3 rounded-lg border border-warm-300 bg-white text-sm" />
+                  rows={5} className="w-full p-3 rounded-lg border border-warm-300 bg-surface text-sm" />
               ) : (
                 <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
               )}
@@ -1443,7 +1452,7 @@ function ContactDrawer() {
                 {edit ? (
                   <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
                     onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                    className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-surface" />
                 ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
                 <span className="text-warm-600">days</span>
               </div>
@@ -1454,7 +1463,7 @@ function ContactDrawer() {
               <SectionHeader>Interaction history</SectionHeader>
               <div className="space-y-2">
                 {contact.interactions.map((i) => (
-                  <div key={i.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-warm-200">
+                  <div key={i.id} className="flex items-start gap-3 p-3 bg-surface rounded-lg border border-warm-200">
                     <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 text-sm">
@@ -1544,12 +1553,12 @@ function LogInteractionModal() {
           <label className="block">
             <span className="text-xs text-warm-600">Date</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white" />
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
           </label>
           <label className="block">
             <span className="text-xs text-warm-600">Type</span>
             <select value={type} onChange={(e) => setType(e.target.value)}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white">
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface">
               {['hangout', 'call', 'text', 'email', 'event', 'other'].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
@@ -1557,21 +1566,21 @@ function LogInteractionModal() {
         <label className="block">
           <span className="text-xs text-warm-600">Location (optional)</span>
           <input value={location} onChange={(e) => setLocation(e.target.value)}
-            className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white" placeholder="e.g. Blue Bottle, Hayes Valley" />
+            className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder="e.g. Blue Bottle, Hayes Valley" />
         </label>
         <label className="block">
           <span className="text-xs text-warm-600">Note</span>
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-            className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white" placeholder="What came up?" />
+            className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder="What came up?" />
         </label>
 
         <div>
           <span className="text-xs text-warm-600">Also at this hangout? (bulk log)</span>
           <div className="mt-1 relative">
             <input value={bulkSearch} onChange={(e) => setBulkSearch(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-white" placeholder="Search contacts…" />
+              className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder="Search contacts…" />
             {matches.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow border border-warm-200">
+              <div className="absolute z-10 w-full mt-1 bg-surface rounded-lg shadow border border-warm-200">
                 {matches.map((c) => (
                   <button key={c.id} onClick={() => { setExtraIds([...extraIds, c.id]); setBulkSearch(''); }}
                     className="w-full flex items-center gap-2 px-3 py-2 hover:bg-warm-100 text-left">
@@ -1836,17 +1845,17 @@ function AllContactsTab() {
       <div className="relative w-full">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
-          className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-white w-full" />
+          className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
       </div>
       <div className="flex items-center gap-2">
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-white">
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-surface">
           <option value="importance">Sort: Importance</option>
           <option value="name">Sort: Name</option>
           <option value="lastContacted">Sort: Last contacted</option>
           <option value="location">Sort: Location</option>
           <option value="category">Sort: Category</option>
         </select>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-white">
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-surface">
           <option value="">All categories</option>
           {allCategories.map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
         </select>
@@ -2051,7 +2060,7 @@ function AddGuestButton({ event }) {
   return (
     <div className="relative">
       <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
-      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-white rounded-xl shadow-xl border border-warm-200 p-3" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-warm-700">Add contact to event</span>
           <button type="button" onClick={() => setOpen(false)} className="text-warm-500 hover:text-warm-700">{Icons.x}</button>
@@ -2122,7 +2131,7 @@ function UnresolvedChip({ event, hint, onConfirm, onDismiss }) {
   return (
     <div className="relative">
       <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-white rounded-xl shadow-xl border border-warm-200 p-3">
+      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-warm-700">Resolve "{hint.firstName}"</span>
           <button onClick={() => setOpen(false)} className="text-warm-500">{Icons.x}</button>
@@ -2321,13 +2330,13 @@ function MapTab() {
             <h2 className="font-serif text-xl text-warm-900">Map</h2>
             {selectedId && <button onClick={() => setSelectedId(null)} className="text-warm-500 hover:text-warm-900 text-xl font-light leading-none">×</button>}
           </div>
-          <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-white text-sm">
+          <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm">
             <option value="">All categories</option>
             {RESERVED_CATEGORIES.concat(state.customCategories).map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
           </select>
           {droppedLatLng && (
             <>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-white text-sm">
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm">
                 <option value="closest">Sort: Closest first</option>
                 <option value="recentRadius">Sort: Recently contacted within radius</option>
                 <option value="staleRadius">Sort: Least recently contacted within radius</option>
@@ -2345,7 +2354,7 @@ function MapTab() {
 
         {/* Inline contact panel — no overlay, stays in sidebar */}
         {selectedContact && (
-          <div className="border-b border-warm-200 bg-white p-4 space-y-3 animate-slide-up">
+          <div className="border-b border-warm-200 bg-surface p-4 space-y-3 animate-slide-up">
             <div className="flex items-start gap-3">
               <Avatar contact={selectedContact} size={44} ring />
               <div className="flex-1 min-w-0">
@@ -2568,7 +2577,7 @@ function AskTab() {
                     <div className="mt-3 grid grid-cols-1 gap-1.5">
                       {m.contacts.map((c) => (
                         <button key={c.id} onClick={() => openDrawer(c.id)}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-white/60 hover:bg-white text-warm-900 text-left">
+                          className="flex items-center gap-2 p-2 rounded-lg bg-surface/60 hover:bg-surface text-warm-900 text-left">
                           <Avatar contact={c} size={28} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">{c.name}</div>
@@ -2594,7 +2603,7 @@ function AskTab() {
             <input value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               placeholder="e.g. who do I know in Lisbon?"
-              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-white" />
+              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-surface" />
             <Button onClick={send} icon={Icons.send}>Send</Button>
           </div>
         </>
@@ -2766,7 +2775,7 @@ function SettingsTab() {
           <div className="flex rounded-lg bg-warm-100 p-1">
             {['light', 'dark'].map((t) => (
               <button key={t} onClick={() => setTheme(t)}
-                className={`px-4 py-1.5 rounded-md text-sm capitalize ${state.theme === t ? 'bg-white shadow-sm text-warm-900' : 'text-warm-600'}`}>{t}</button>
+                className={`px-4 py-1.5 rounded-md text-sm capitalize ${state.theme === t ? 'bg-surface shadow-sm text-warm-900' : 'text-warm-600'}`}>{t}</button>
             ))}
           </div>
         </div>
@@ -2774,7 +2783,7 @@ function SettingsTab() {
           <p className="text-sm text-warm-700 mb-2">Category colors</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {RESERVED_CATEGORIES.map((c) => (
-              <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg border border-warm-200 bg-white text-sm">
+              <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg border border-warm-200 bg-surface text-sm">
                 <span className="w-4 h-4 rounded-full" style={{ background: c.color }} />
                 <span className="truncate">{c.label.replace(/^CRM:\s*/, '')}</span>
               </div>
@@ -2791,7 +2800,7 @@ function SettingsTab() {
           <label className="block">
             <span className="text-xs text-warm-600">Provider</span>
             <select value={state.llm.provider} onChange={(e) => updateLLM({ provider: e.target.value })}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white">
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface">
               <option value="demo">Demo matcher (local, no network)</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
@@ -2803,7 +2812,7 @@ function SettingsTab() {
             <span className="text-xs text-warm-600">{state.llm.provider === 'ollama' || state.llm.provider === 'other' ? 'Endpoint URL' : 'API key'}</span>
             <input type="password" value={state.llm.provider === 'ollama' || state.llm.provider === 'other' ? state.llm.endpoint : state.llm.apiKey}
               onChange={(e) => updateLLM(state.llm.provider === 'ollama' || state.llm.provider === 'other' ? { endpoint: e.target.value } : { apiKey: e.target.value })}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-white" placeholder={state.llm.provider === 'demo' ? 'Not needed' : '—'}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder={state.llm.provider === 'demo' ? 'Not needed' : '—'}
               disabled={state.llm.provider === 'demo'} />
           </label>
         </div>
@@ -2826,7 +2835,7 @@ function SettingsTab() {
           <span className="text-warm-700">Default close-friend cadence:</span>
           <input type="number" min="1" value={state.nudges.defaultCloseFriendDays}
             onChange={(e) => updateNudges({ defaultCloseFriendDays: Number(e.target.value) })}
-            className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-white" />
+            className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-surface" />
           <span>days</span>
         </div>
         <div>
@@ -2838,7 +2847,7 @@ function SettingsTab() {
                 <span className="text-xs text-warm-600">every</span>
                 <input type="number" min="0" value={state.nudges.groupCadence[c.key] || ''}
                   onChange={(e) => updateNudges({ groupCadence: { ...state.nudges.groupCadence, [c.key]: e.target.value ? Number(e.target.value) : 0 } })}
-                  className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-white text-sm" placeholder="off" />
+                  className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-surface text-sm" placeholder="off" />
                 <span className="text-xs text-warm-600">days</span>
               </div>
             ))}
