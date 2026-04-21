@@ -17,7 +17,7 @@ const loadClientId = () => {
   } catch (e) { return ''; }
 };
 const saveClientId = (id) => {
-  try { localStorage.setItem(CLIENT_ID_KEY, id); } catch (e) {}
+  try { localStorage.setItem(CLIENT_ID_KEY, id); } catch (e) { }
 };
 
 const RESERVED_CATEGORIES = [
@@ -155,7 +155,7 @@ const loadState = () => {
   } catch (e) { return null; }
 };
 const saveState = (s) => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { }
 };
 
 // ───────────────────────────────────────────────────────────────────
@@ -182,7 +182,8 @@ const Icons = {
   search: <Icon d={<><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></>} />,
   pin: <Icon d={<><path d="M20 10c0 7-8 13-8 13S4 17 4 10a8 8 0 1 1 16 0z" /><circle cx="12" cy="10" r="3" /></>} />,
   edit: <Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
-  google: <svg viewBox="0 0 48 48" className="w-5 h-5"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.1 35 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.6l6.2 5.2C41.3 34.8 44 29.8 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg>,
+  externalLink: <Icon d={<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></>} />,
+  google: <svg viewBox="0 0 48 48" className="w-5 h-5"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" /><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.1 35 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.6l6.2 5.2C41.3 34.8 44 29.8 44 24c0-1.2-.1-2.4-.4-3.5z" /></svg>,
   logo: (
     <svg viewBox="0 0 32 32" className="w-6 h-6">
       <path d="M16 3c3 4 7 7 7 12a7 7 0 1 1-14 0c0-5 4-8 7-12z" fill="#63854e" />
@@ -197,9 +198,25 @@ const Icons = {
 
 const Avatar = ({ contact, size = 40, ring = false }) => {
   const { initials, hue } = contact.avatar || { initials: (contact.name || '?').slice(0, 2).toUpperCase(), hue: 200 };
+  const ringClass = ring ? 'ring-2 ring-warm-200 ring-offset-2 ring-offset-warm-50' : '';
+  if (contact.photoUrl) {
+    return (
+      <img
+        src={contact.photoUrl}
+        alt={contact.name || ''}
+        referrerPolicy="no-referrer"
+        className={`shrink-0 rounded-full object-cover select-none ${ringClass}`}
+        style={{ width: size, height: size }}
+        onError={(e) => {
+          e.currentTarget.style.display = 'none';
+          e.currentTarget.nextSibling.style.display = 'flex';
+        }}
+      />
+    );
+  }
   return (
     <div
-      className={`shrink-0 rounded-full flex items-center justify-center text-white font-semibold select-none ${ring ? 'ring-2 ring-warm-200 ring-offset-2 ring-offset-warm-50' : ''}`}
+      className={`shrink-0 rounded-full flex items-center justify-center text-white font-semibold select-none ${ringClass}`}
       style={{
         width: size, height: size,
         background: `linear-gradient(135deg, hsl(${hue}, 55%, 55%), hsl(${(hue + 40) % 360}, 55%, 42%))`,
@@ -302,6 +319,16 @@ function AppProvider({ children }) {
     });
   }, []);
 
+  // Restore Google token on page load so writes work without re-signing in
+  useEffect(() => {
+    const s = loadState();
+    if (s && s.googleSignedIn && !s.demoMode && window.TetherGoogle) {
+      window.TetherGoogle.init(loadClientId())
+        .then(() => window.TetherGoogle.tryRestoreToken())
+        .catch(() => { });
+    }
+  }, []);
+
   // ── Contact ops
   const updateContact = useCallback((id, patch) => {
     setState((s) => ({
@@ -335,11 +362,11 @@ function AppProvider({ children }) {
       const contact = s.contacts.find((c) => c.id === contactId);
       const contacts = s.contacts.map((c) => c.id === contactId
         ? {
-            ...c,
-            interactions: [entry, ...c.interactions],
-            lastContactedAt: iso,
-            lastContactedDaysAgo: 0,
-          } : c);
+          ...c,
+          interactions: [entry, ...c.interactions],
+          lastContactedAt: iso,
+          lastContactedDaysAgo: 0,
+        } : c);
       // Also surface on Calendar tab as a synthetic "Personal CRM" event
       const syntheticEvent = {
         id: `log-${entry.id}`,
@@ -362,6 +389,31 @@ function AppProvider({ children }) {
   const allCategories = useMemo(() => [...RESERVED_CATEGORIES, ...state.customCategories], [state.customCategories]);
 
   // ── Event / attendee ops
+  const addGuestToEvent = useCallback((eventId, contactId) => {
+    setState((s) => {
+      const contact = s.contacts.find((c) => c.id === contactId);
+      if (!contact) return s;
+      const email = contact.email || `${contact.id}@contact.local`;
+      const events = s.events.map((e) => {
+        if (e.id !== eventId) return e;
+        const guestEmails = e.guestEmails.includes(email) ? e.guestEmails : [...e.guestEmails, email];
+        return { ...e, guestEmails };
+      });
+      return { ...s, events };
+    });
+  }, [setState]);
+
+  const removeGuestFromEvent = useCallback((eventId, email) => {
+    setState((s) => {
+      const events = s.events.map((e) => {
+        if (e.id !== eventId) return e;
+        const guestEmails = e.guestEmails.filter((em) => em.toLowerCase() !== email.toLowerCase());
+        return { ...e, guestEmails };
+      });
+      return { ...s, events };
+    });
+  }, [setState]);
+
   const resolveEventAttendee = useCallback((eventId, contactId, hintFirstName) => {
     setState((s) => {
       const contact = s.contacts.find((c) => c.id === contactId);
@@ -376,11 +428,11 @@ function AppProvider({ children }) {
       const entry = { id: uid(), date: interactionDate, type: 'hangout', note: `Resolved from "${ev?.title}"` };
       const contacts = s.contacts.map((c) => c.id === contactId
         ? {
-            ...c,
-            interactions: [entry, ...c.interactions],
-            lastContactedAt: interactionDate > (c.lastContactedAt || '') ? interactionDate : c.lastContactedAt,
-            lastContactedDaysAgo: Math.min(c.lastContactedDaysAgo, daysSince(interactionDate)),
-          } : c);
+          ...c,
+          interactions: [entry, ...c.interactions],
+          lastContactedAt: interactionDate > (c.lastContactedAt || '') ? interactionDate : c.lastContactedAt,
+          lastContactedDaysAgo: Math.min(c.lastContactedDaysAgo, daysSince(interactionDate)),
+        } : c);
       const dismissKey = hintFirstName ? `${eventId}:${hintFirstName.toLowerCase()}` : null;
       const dismissedAttendeeIds = dismissKey && !s.dismissedAttendeeIds.includes(dismissKey)
         ? [...s.dismissedAttendeeIds, dismissKey]
@@ -419,6 +471,7 @@ function AppProvider({ children }) {
     updateContact, addCrmLabelToContact, removeCrmLabelFromContact,
     logInteraction, logInteractionMany,
     resolveEventAttendee, dismissAttendee,
+    addGuestToEvent, removeGuestFromEvent,
     addCustomCategory, setTheme,
     allCategories,
   };
@@ -609,7 +662,7 @@ function SyncProgress() {
             await new Promise((r) => setTimeout(r, 350));
           }
           contacts = state.contacts;
-          events   = state.events;
+          events = state.events;
         } else {
           // Real sync — single call, captures result
           const result = await window.TetherGoogle.syncAll(({ label, pct }) => {
@@ -617,7 +670,7 @@ function SyncProgress() {
             setStage(label);
           });
           contacts = result.contacts;
-          events   = result.events;
+          events = result.events;
         }
 
         // Geocode contacts that have a city but no coordinates
@@ -1193,24 +1246,42 @@ function ContactDrawer() {
   const contact = contactId ? state.contacts.find((c) => c.id === contactId) : null;
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [syncErrorMsg, setSyncErrorMsg] = useState('');
 
   useEffect(() => {
     if (contact) setDraft({ ...contact });
     setEdit(false);
+    setSyncErrorMsg('');
   }, [contactId]);
 
   if (!contact || !draft) return null;
 
-  const save = () => {
-    updateContact(contact.id, {
+  const save = async () => {
+    const patch = {
       name: draft.name, email: draft.email, phone: draft.phone,
       linkedin: draft.linkedin, instagram: draft.instagram, facebook: draft.facebook, website: draft.website,
       notes: draft.notes,
       custom: draft.custom,
       nudgeFrequencyDays: draft.nudgeFrequencyDays,
       location: draft.location,
-    });
-    setEdit(false);
+    };
+    if (!state.demoMode && window.TetherGoogle && window.TetherGoogle.hasToken()) {
+      setSaving(true);
+      try {
+        const newEtag = await window.TetherGoogle.updatePerson(contact, patch);
+        updateContact(contact.id, { ...patch, ...(newEtag ? { etag: newEtag } : {}) });
+        setEdit(false);
+      } catch (e) {
+        console.error('[Tether] Sync failed:', e);
+        setSyncErrorMsg(e?.result?.error?.message || e?.message || 'Unknown error');
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      updateContact(contact.id, patch);
+      setEdit(false);
+    }
   };
 
   const cats = categoriesFor(contact, state.customCategories);
@@ -1218,170 +1289,189 @@ function ContactDrawer() {
   const nonCrmLabels = contact.googleLabels;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end animate-fade-in" onClick={close}>
-      <div className="absolute inset-0 bg-warm-900/40 drawer-backdrop" />
-      <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-warm-200 flex items-start gap-4">
-          <Avatar contact={contact} size={64} ring />
-          <div className="flex-1 min-w-0">
-            {edit ? (
-              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                className="font-serif text-2xl w-full bg-transparent border-b border-warm-300 focus:border-sage-500 py-1" />
-            ) : (
-              <h2 className="font-serif text-2xl text-warm-900">{contact.name}</h2>
-            )}
-            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-              {cats.length > 0
-                ? cats.map((c) => <CategoryPill key={c.key} category={c} onRemove={() => removeCrmLabelFromContact(contact.id, c.label)} />)
-                : <span className="text-xs text-warm-500 italic">No Tether category</span>}
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
-            </div>
-          </div>
-          <button onClick={close} className="text-warm-600 hover:text-warm-900 p-1">{Icons.x}</button>
-        </div>
-
-        {/* Add category + actions */}
-        <div className="px-6 py-3 bg-warm-100/50 border-b border-warm-200 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Log interaction</Button>
-            {availableCats.length > 0 && (
-              <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
-                className="px-3 py-1.5 rounded-lg border border-warm-300 bg-white text-sm" defaultValue="">
-                <option value="">+ Add category</option>
-                {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
-              </select>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {edit ? (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
-                <Button size="sm" onClick={save}>Save to Google</Button>
-              </>
-            ) : (
-              <Button size="sm" variant="secondary" icon={Icons.edit} onClick={() => setEdit(true)}>Edit</Button>
-            )}
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Contact info */}
-          <section>
-            <SectionHeader>Contact</SectionHeader>
-            <div className="space-y-2 text-sm">
-              {['email', 'phone'].map((f) => (
-                <div key={f} className="flex items-center gap-3">
-                  <span className="w-20 text-warm-600 capitalize">{f}</span>
-                  {edit ? (
-                    <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
-                  ) : <span className="text-warm-900">{contact[f] || '—'}</span>}
-                </div>
-              ))}
-              <div className="flex items-start gap-3">
-                <span className="w-20 text-warm-600 pt-1.5">Location</span>
-                {edit ? (
-                  <LocationAutocomplete
-                    value={draft.location}
-                    onChange={(loc) => setDraft({ ...draft, location: loc })}
-                  />
-                ) : (
-                  <span className="text-warm-900 pt-1">
-                    {contact.location?.city ? [contact.location.city, contact.location.country].filter(Boolean).join(', ') : '—'}
-                  </span>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Social */}
-          <section>
-            <SectionHeader>Links</SectionHeader>
-            <div className="space-y-2 text-sm">
-              {['linkedin', 'instagram', 'facebook', 'website'].map((f) => (
-                <div key={f} className="flex items-center gap-3">
-                  <span className="w-20 text-warm-600 capitalize">{f}</span>
-                  {edit ? (
-                    <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" placeholder="Paste URL or handle" />
-                  ) : contact[f] ? <span className="text-warm-900 truncate">{contact[f]}</span> : <span className="text-warm-500">—</span>}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-warm-500 mt-2 italic">Tether stores links but does not scrape these services.</p>
-          </section>
-
-          {/* Custom */}
-          <section>
-            <SectionHeader>Custom fields</SectionHeader>
-            <div className="space-y-2 text-sm">
-              {['company', 'title', 'howWeMet'].map((f) => (
-                <div key={f} className="flex items-center gap-3">
-                  <span className="w-24 text-warm-600">{f === 'howWeMet' ? 'How we met' : f.charAt(0).toUpperCase() + f.slice(1)}</span>
-                  {edit ? (
-                    <input value={draft.custom?.[f] || ''} onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f]: e.target.value } })}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
-                  ) : <span className="text-warm-900">{contact.custom?.[f] || '—'}</span>}
-                </div>
-              ))}
-              <div className="flex items-start gap-3">
-                <span className="w-24 text-warm-600">Skills</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {(contact.skills || []).map((s) => <Tag key={s} label={s} />)}
-                  {(!contact.skills || contact.skills.length === 0) && <span className="text-warm-500">—</span>}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Notes */}
-          <section>
-            <SectionHeader>Notes</SectionHeader>
-            {edit ? (
-              <textarea value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                rows={5} className="w-full p-3 rounded-lg border border-warm-300 bg-white text-sm" />
-            ) : (
-              <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
-            )}
-          </section>
-
-          {/* Nudge */}
-          <section>
-            <SectionHeader>Nudge frequency</SectionHeader>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-warm-600">Remind me every</span>
+    <>
+      <div className="fixed inset-0 z-40 flex justify-end animate-fade-in" onClick={close}>
+        <div className="absolute inset-0 bg-warm-900/40 drawer-backdrop" />
+        <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+          <div className="p-6 border-b border-warm-200 flex items-start gap-4">
+            <Avatar contact={contact} size={64} ring />
+            <div className="flex-1 min-w-0">
               {edit ? (
-                <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
-                  onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
-                  className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-white" />
-              ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
-              <span className="text-warm-600">days</span>
+                <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  className="font-serif text-2xl w-full bg-transparent border-b border-warm-300 focus:border-sage-500 py-1" />
+              ) : (
+                <h2 className="font-serif text-2xl text-warm-900">{contact.name}</h2>
+              )}
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                {cats.length > 0
+                  ? cats.map((c) => <CategoryPill key={c.key} category={c} onRemove={() => removeCrmLabelFromContact(contact.id, c.label)} />)
+                  : <span className="text-xs text-warm-500 italic">No Tether category</span>}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
+              </div>
             </div>
-          </section>
+            <button onClick={close} className="text-warm-600 hover:text-warm-900 p-1">{Icons.x}</button>
+          </div>
 
-          {/* History */}
-          <section>
-            <SectionHeader>Interaction history</SectionHeader>
-            <div className="space-y-2">
-              {contact.interactions.map((i) => (
-                <div key={i.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-warm-200">
-                  <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium text-warm-900 capitalize">{i.type}</span>
-                      <span className="text-warm-500">· {formatDate(i.date)} ({relativeDate(i.date)})</span>
-                    </div>
-                    {i.note && <div className="text-xs text-warm-700 mt-0.5">{i.note}</div>}
+          {/* Add category + actions */}
+          <div className="px-6 py-3 bg-warm-100/50 border-b border-warm-200 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Log interaction</Button>
+              {availableCats.length > 0 && (
+                <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
+                  className="px-3 py-1.5 rounded-lg border border-warm-300 bg-white text-sm" defaultValue="">
+                  <option value="">+ Add category</option>
+                  {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
+                </select>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {edit ? (
+                <>
+                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
+                  <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save to Google'}</Button>
+                </>
+              ) : (
+                <Button size="sm" variant="secondary" icon={Icons.edit} onClick={() => setEdit(true)}>Edit</Button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Contact info */}
+            <section>
+              <SectionHeader>Contact</SectionHeader>
+              <div className="space-y-2 text-sm">
+                {['email', 'phone'].map((f) => (
+                  <div key={f} className="flex items-center gap-3">
+                    <span className="w-20 text-warm-600 capitalize">{f}</span>
+                    {edit ? (
+                      <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                    ) : <span className="text-warm-900">{contact[f] || '—'}</span>}
+                  </div>
+                ))}
+                <div className="flex items-start gap-3">
+                  <span className="w-20 text-warm-600 pt-1.5">Location</span>
+                  {edit ? (
+                    <LocationAutocomplete
+                      value={draft.location}
+                      onChange={(loc) => setDraft({ ...draft, location: loc })}
+                    />
+                  ) : (
+                    <span className="text-warm-900 pt-1">
+                      {contact.location?.city ? [contact.location.city, contact.location.country].filter(Boolean).join(', ') : '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Social */}
+            <section>
+              <SectionHeader>Links</SectionHeader>
+              <div className="space-y-2 text-sm">
+                {['linkedin', 'instagram', 'facebook', 'website'].map((f) => (
+                  <div key={f} className="flex items-center gap-3">
+                    <span className="w-20 text-warm-600 capitalize">{f}</span>
+                    {edit ? (
+                      <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" placeholder="Paste URL or handle" />
+                    ) : contact[f] ? <span className="text-warm-900 truncate">{contact[f]}</span> : <span className="text-warm-500">—</span>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-warm-500 mt-2 italic">Tether stores links but does not scrape these services.</p>
+            </section>
+
+            {/* Custom */}
+            <section>
+              <SectionHeader>Custom fields</SectionHeader>
+              <div className="space-y-2 text-sm">
+                {['company', 'title', 'howWeMet'].map((f) => (
+                  <div key={f} className="flex items-center gap-3">
+                    <span className="w-24 text-warm-600">{f === 'howWeMet' ? 'How we met' : f.charAt(0).toUpperCase() + f.slice(1)}</span>
+                    {edit ? (
+                      <input value={draft.custom?.[f] || ''} onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f]: e.target.value } })}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                    ) : <span className="text-warm-900">{contact.custom?.[f] || '—'}</span>}
+                  </div>
+                ))}
+                <div className="flex items-start gap-3">
+                  <span className="w-24 text-warm-600">Skills</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(contact.skills || []).map((s) => <Tag key={s} label={s} />)}
+                    {(!contact.skills || contact.skills.length === 0) && <span className="text-warm-500">—</span>}
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            </section>
+
+            {/* Notes */}
+            <section>
+              <SectionHeader>Notes</SectionHeader>
+              {edit ? (
+                <textarea value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                  rows={5} className="w-full p-3 rounded-lg border border-warm-300 bg-white text-sm" />
+              ) : (
+                <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
+              )}
+            </section>
+
+            {/* Nudge */}
+            <section>
+              <SectionHeader>Nudge frequency</SectionHeader>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-warm-600">Remind me every</span>
+                {edit ? (
+                  <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
+                    onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
+                    className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-white" />
+                ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
+                <span className="text-warm-600">days</span>
+              </div>
+            </section>
+
+            {/* History */}
+            <section>
+              <SectionHeader>Interaction history</SectionHeader>
+              <div className="space-y-2">
+                {contact.interactions.map((i) => (
+                  <div key={i.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-warm-200">
+                    <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-warm-900 capitalize">{i.type}</span>
+                        <span className="text-warm-500">· {formatDate(i.date)} ({relativeDate(i.date)})</span>
+                      </div>
+                      {i.note && <div className="text-xs text-warm-700 mt-0.5">{i.note}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
-    </div>
+
+      <Modal open={!!syncErrorMsg} onClose={() => setSyncErrorMsg('')} title="Sync to Google failed" size="sm">
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-warm-700">
+            Your changes were saved locally but couldn't be synced to Google Contacts.
+          </p>
+          {syncErrorMsg && (
+            <p className="text-xs font-mono bg-warm-100 rounded-lg px-3 py-2 text-warm-800">{syncErrorMsg}</p>
+          )}
+          <p className="text-sm text-warm-700">
+            Try signing out and back in to refresh your Google connection, then save again.
+          </p>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => setSyncErrorMsg('')}>OK</Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 
@@ -1847,17 +1937,25 @@ function CalendarTab() {
 }
 
 function EventRow({ event }) {
-  const { state, resolveEventAttendee, dismissAttendee } = useApp();
+  const { state, resolveEventAttendee, dismissAttendee, removeGuestFromEvent } = useApp();
   const { open: openDrawer } = useDrawer();
 
   const matchedContacts = useMemo(() =>
-    event.guestEmails
+    (event.guestEmails || [])
       .map((em) => state.contacts.find((c) => (c.email || '').toLowerCase() === em.toLowerCase()))
       .filter(Boolean),
     [event.guestEmails, state.contacts]
   );
   const unresolved = useMemo(() => getUnresolvedHints(event, state.contacts, state.dismissedAttendeeIds), [event, state.contacts, state.dismissedAttendeeIds]);
   const isInteractionLog = event.id.startsWith('log-');
+
+  const handleRemoveGuest = (e, email, name) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm(`Remove ${name} from this event?`)) {
+      removeGuestFromEvent(event.id, email);
+    }
+  };
 
   return (
     <Card className={`p-4 flex items-start gap-4 ${isInteractionLog ? 'bg-sage-50/50' : ''}`}>
@@ -1873,11 +1971,16 @@ function EventRow({ event }) {
         <div className="text-xs text-warm-600 mt-0.5">{new Date(event.start).toLocaleDateString()} {event.location ? `· ${event.location}` : ''}</div>
         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
           {matchedContacts.map((c) => (
-            <button key={c.id} onClick={() => openDrawer(c.id)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-warm-100 transition"
+            <button type="button" key={c.id} onClick={() => openDrawer(c.id)}
+              onContextMenu={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-warm-100 transition group relative"
               style={{ background: colorFor(c, state.customCategories) + '1a', border: `1px solid ${colorFor(c, state.customCategories)}33` }}>
               <Avatar contact={c} size={20} />
               <span className="text-xs font-medium" style={{ color: colorFor(c, state.customCategories) }}>{c.name}</span>
+              <div 
+                onClick={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
+                className="absolute -top-1.5 -right-1.5 hidden group-hover:flex bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] items-center justify-center shadow-sm z-10"
+              >×</div>
             </button>
           ))}
           {unresolved.map((u) => (
@@ -1885,13 +1988,78 @@ function EventRow({ event }) {
               onConfirm={(cId) => resolveEventAttendee(event.id, cId, u.firstName)}
               onDismiss={() => dismissAttendee(event.id, u.firstName)} />
           ))}
+          <AddGuestButton event={event} />
           {matchedContacts.length === 0 && unresolved.length === 0 && (
             <span className="text-xs text-warm-500 italic">No attendees matched</span>
           )}
         </div>
         {event.description && <div className="text-xs text-warm-700 mt-1.5">{event.description}</div>}
       </div>
+      {!isInteractionLog && event.htmlLink && (
+        <a href={event.htmlLink} target="_blank" rel="noreferrer"
+          title="Open in Google Calendar"
+          className="shrink-0 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition">
+          {Icons.externalLink}
+        </a>
+      )}
     </Card>
+  );
+}
+
+function AddGuestButton({ event }) {
+  const { state, addGuestToEvent } = useApp();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const suggestions = useMemo(() => {
+    if (!search) return [];
+    const confirmedEmails = new Set((event.guestEmails || []).map((e) => e.toLowerCase()));
+    const q = search.toLowerCase();
+    return state.contacts
+      .filter((c) => !confirmedEmails.has((c.email || '').toLowerCase()))
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .sort((a, b) => importanceScore(b) - importanceScore(a))
+      .slice(0, 5);
+  }, [search, event.guestEmails, state.contacts]);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        title="Add guest"
+        className="w-7 h-7 rounded-full bg-warm-100 hover:bg-warm-200 border border-warm-300 flex items-center justify-center text-warm-600 transition shrink-0">
+        {Icons.plus}
+      </button>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-white rounded-xl shadow-xl border border-warm-200 p-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-warm-700">Add contact to event</span>
+          <button type="button" onClick={() => setOpen(false)} className="text-warm-500 hover:text-warm-700">{Icons.x}</button>
+        </div>
+        <input value={search} onChange={(e) => setSearch(e.target.value)}
+          autoFocus
+          placeholder="Search by name..."
+          className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm mb-2" />
+        <div className="max-h-64 overflow-y-auto space-y-1">
+          {search && suggestions.length === 0 && <div className="text-xs text-warm-500 italic p-2">No matches</div>}
+          {!search && <div className="text-xs text-warm-500 italic p-2 text-center">Type to search contacts</div>}
+          {suggestions.map((c) => (
+            <button type="button" key={c.id} onMouseDown={(e) => e.preventDefault()} onClick={() => { addGuestToEvent(event.id, c.id); setOpen(false); }}
+              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-warm-100 text-left">
+              <Avatar contact={c} size={28} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
+                <div className="text-xs text-warm-600 truncate">{c.email}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1994,7 +2162,10 @@ function MapTab() {
     const color = colorFor(contact, state.customCategories);
     const size = selected ? 38 : 28;
     const border = selected ? 'border:3px solid white;box-shadow:0 0 0 2px ' + color + ';' : '';
-    const html = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${selected ? 13 : 10}px;box-shadow:0 2px 8px rgba(0,0,0,.35);${border}transition:all .15s"><span>${contact.avatar.initials}</span></div>`;
+    const inner = contact.photoUrl
+      ? `<img src="${contact.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.innerHTML='<span>${contact.avatar.initials}</span>';this.parentNode.style.justifyContent='center';" />`
+      : `<span>${contact.avatar.initials}</span>`;
+    const html = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${selected ? 13 : 10}px;box-shadow:0 2px 8px rgba(0,0,0,.35);${border}transition:all .15s;overflow:hidden">${inner}</div>`;
     return L.divIcon({ html, iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '' });
   };
 
@@ -2511,7 +2682,7 @@ function SettingsTab() {
         return;
       }
       setSyncMsg('Syncing contacts & calendar…');
-      const result = await window.TetherGoogle.syncAll(() => {});
+      const result = await window.TetherGoogle.syncAll(() => { });
       let { contacts, events } = result;
       const needsGeocode = contacts.filter(
         (c) => c.location && c.location.city && c.location.lat == null

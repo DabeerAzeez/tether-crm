@@ -15,6 +15,7 @@
     'https://www.googleapis.com/auth/calendar.readonly',
     'openid', 'profile', 'email',
   ].join(' ');
+  const TOKEN_STORAGE_KEY = 'tether-google-token';
 
   let tokenClient = null;
   let gapiReady = false;
@@ -66,6 +67,10 @@
         if (!resp || !resp.access_token) return reject(new Error('No access token returned'));
         currentToken = resp;
         window.gapi.client.setToken({ access_token: resp.access_token });
+        try {
+          const expiresAt = Date.now() + (resp.expires_in || 3600) * 1000;
+          localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({ access_token: resp.access_token, expires_at: expiresAt }));
+        } catch (e) {}
         resolve(resp);
       };
       try {
@@ -240,6 +245,7 @@
       description: e.description || '',
       guestEmails: (e.attendees || []).map((a) => a.email).filter(Boolean),
       organizerEmail: (e.organizer && e.organizer.email) || '',
+      htmlLink: e.htmlLink || '',
       synthetic: false,
     };
   }
@@ -266,6 +272,27 @@
     });
   }
 
+  // For birthday events like "Mom's Birthday", auto-add the matched contact to guestEmails
+  // so they show as a resolved chip without requiring manual confirmation.
+  // Only resolves when there is exactly one contact with that name (case-insensitive).
+  function resolveBirthdayAttendees(contacts, events) {
+    const byNameLower = {};
+    contacts.forEach((c) => {
+      const key = c.name.toLowerCase();
+      if (!byNameLower[key]) byNameLower[key] = [];
+      byNameLower[key].push(c);
+    });
+    return events.map((e) => {
+      const m = e.title.match(/^(.+?)'s\s+birthday$/i);
+      if (!m) return e;
+      const matches = byNameLower[m[1].trim().toLowerCase()] || [];
+      if (matches.length !== 1) return e;
+      const ref = matches[0].email || `${matches[0].id}@contact.local`;
+      if (e.guestEmails.includes(ref)) return e;
+      return { ...e, guestEmails: [...e.guestEmails, ref] };
+    });
+  }
+
   async function syncAll(onProgress) {
     const report = (label, pct) => { if (onProgress) onProgress({ label, pct }); };
     report('Loading contact labels…', 15);
@@ -279,17 +306,100 @@
     let contacts = persons.map((p) => personToContact(p, groupsMap));
     report('Fetching calendar (last 3 months + upcoming)…', 80);
     const rawEvents = await listEvents({ pastDays: 90, futureDays: 30 });
-    const events = rawEvents.map(eventToSimple);
+    let events = rawEvents.map(eventToSimple);
     report('Cross-referencing attendees…', 92);
     contacts = computeLastContacted(contacts, events);
+    events = resolveBirthdayAttendees(contacts, events);
     report('Done', 100);
     return { contacts, events };
+  }
+
+  async function updatePerson(contact, patch) {
+    // Maps app-format patch fields back to Google People API format and PATCHes the contact.
+    // Returns the updated etag from the response (needed for future writes).
+    const resource = { etag: contact.etag };
+    const updateFields = [];
+
+    if ('name' in patch) {
+      resource.names = patch.name ? [{ unstructuredName: patch.name }] : [];
+      updateFields.push('names');
+    }
+    if ('email' in patch) {
+      resource.emailAddresses = patch.email ? [{ value: patch.email }] : [];
+      updateFields.push('emailAddresses');
+    }
+    if ('phone' in patch) {
+      resource.phoneNumbers = patch.phone ? [{ value: patch.phone }] : [];
+      updateFields.push('phoneNumbers');
+    }
+    if ('notes' in patch) {
+      resource.biographies = patch.notes ? [{ value: patch.notes, contentType: 'TEXT_PLAIN' }] : [];
+      updateFields.push('biographies');
+    }
+    if ('linkedin' in patch || 'instagram' in patch || 'facebook' in patch || 'website' in patch) {
+      const urls = [];
+      const li = ('linkedin' in patch ? patch.linkedin : contact.linkedin) || '';
+      const ig = ('instagram' in patch ? patch.instagram : contact.instagram) || '';
+      const fb = ('facebook' in patch ? patch.facebook : contact.facebook) || '';
+      const ws = ('website' in patch ? patch.website : contact.website) || '';
+      if (li) urls.push({ value: li, type: 'profile' });
+      if (ig) urls.push({ value: ig, type: 'profile' });
+      if (fb) urls.push({ value: fb, type: 'profile' });
+      if (ws) urls.push({ value: ws });
+      resource.urls = urls;
+      updateFields.push('urls');
+    }
+    if (patch.custom && ('company' in patch.custom || 'title' in patch.custom)) {
+      const company = patch.custom.company || '';
+      const title = patch.custom.title || '';
+      resource.organizations = (company || title) ? [{ name: company, title }] : [];
+      updateFields.push('organizations');
+    }
+    if ('location' in patch) {
+      resource.addresses = patch.location
+        ? [{ city: patch.location.city || '', country: patch.location.country || '', formattedValue: patch.location.raw || '' }]
+        : [];
+      updateFields.push('addresses');
+    }
+
+    if (!updateFields.length) return null;
+
+    await ensureGapi();
+    if (currentToken && currentToken.access_token) {
+      window.gapi.client.setToken({ access_token: currentToken.access_token });
+    }
+
+    const r = await window.gapi.client.people.people.updateContact({
+      resourceName: contact.id,
+      updatePersonFields: updateFields.join(','),
+      resource,
+    });
+    return r.result.etag || null;
+  }
+
+  async function tryRestoreToken() {
+    try {
+      const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!raw) return false;
+      const { access_token, expires_at } = JSON.parse(raw);
+      if (!access_token || Date.now() > expires_at - 60000) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        return false;
+      }
+      await ensureGapi();
+      currentToken = { access_token };
+      window.gapi.client.setToken({ access_token });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function hasToken() { return !!(currentToken && currentToken.access_token); }
 
   function revoke() {
     return new Promise((resolve) => {
+      try { localStorage.removeItem(TOKEN_STORAGE_KEY); } catch (e) {}
       if (currentToken && currentToken.access_token && window.google && window.google.accounts && window.google.accounts.oauth2) {
         try {
           window.google.accounts.oauth2.revoke(currentToken.access_token, () => {
@@ -310,6 +420,8 @@
     signIn,
     fetchProfile,
     syncAll,
+    updatePerson,
+    tryRestoreToken,
     hasToken,
     revoke,
     get scopes() { return SCOPES; },
