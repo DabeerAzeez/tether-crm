@@ -949,40 +949,51 @@ function OnboardingShell({ step, title, subtitle, children }) {
 // ───────────────────────────────────────────────────────────────────
 
 const WALKTHROUGH_STEPS = [
-  { title: 'Reconnect', body: "Your landing tab. Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity." },
-  { title: 'Ask', body: "Chat over your network. Ask things like 'Who do I know in Berlin?' or 'Which friends are into climbing?' — configure an LLM in Settings, or use the built-in demo matcher." },
-  { title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency." },
-  { title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction." },
-  { title: 'All Contacts', body: "Every contact Google knows about. Default sort is our importance ranking — tweak from the header." },
-  { title: 'Help & Settings', body: "Help has docs and a button to rerun this walkthrough. Settings is where you change theme, LLM config, and sync options." },
+  { tabKey: 'reconnect', title: 'Reconnect', body: "Your landing tab. Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
+  { tabKey: 'ask', title: 'Ask', body: "Chat over your network. Ask things like 'Who do I know in Berlin?' or 'Which friends are into climbing?' — configure an LLM in Settings, or use the built-in demo matcher.", position: 'top' },
+  { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency.", position: 'top' },
+  { tabKey: 'calendar', title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction.", position: 'top' },
+  { tabKey: 'contacts', title: 'All Contacts', body: "Every contact Google knows about. Default sort is our importance ranking — tweak from the header.", position: 'top' },
+  { tabKey: 'help', title: 'Help', body: "Help has docs and a button to rerun this walkthrough.", position: 'bottom' },
+  { tabKey: 'settings', title: 'Settings', body: "Settings is where you change theme, LLM config, and sync options.", position: 'bottom' },
 ];
 
 function WalkthroughOverlay() {
-  const { setState } = useApp();
+  const { state, setState } = useApp();
   const [step, setStep] = useState(0);
+
+  const current = WALKTHROUGH_STEPS[step];
+
+  useEffect(() => {
+    if (current.tabKey) {
+      setState(s => ({ ...s, activeTab: current.tabKey }));
+    }
+  }, [step, current.tabKey, setState]);
 
   const finish = (skipped) => {
     setState((s) => ({ ...s, phase: 'dashboard', walkthroughDone: true, walkthroughSkippedToastAt: skipped ? Date.now() : null }));
   };
 
-  const current = WALKTHROUGH_STEPS[step];
+  const alignClass = current.position === 'bottom' ? 'items-end pb-12' : 'items-start pt-32';
+
   return (
-    <div className="fixed inset-0 z-50 bg-warm-900/70 flex items-center justify-center p-6 animate-fade-in">
-      <div className="bg-warm-50 rounded-2xl max-w-lg w-full p-8 shadow-xl animate-slide-up">
-        <div className="flex items-center gap-2 mb-4">
+    <div className={`fixed inset-0 z-50 flex ${alignClass} justify-start pl-8 sm:pl-[280px] pointer-events-none animate-fade-in`}>
+      <div className="absolute inset-0 bg-warm-900/40 backdrop-blur-sm pointer-events-auto" />
+      <div className="relative z-10 pointer-events-auto bg-warm-50 rounded-2xl max-w-sm w-full p-8 shadow-2xl animate-slide-up border border-warm-200">
+        <div className="flex items-center gap-2 mb-6">
           {WALKTHROUGH_STEPS.map((_, i) => (
             <div key={i} className={`h-1 flex-1 rounded-full ${i <= step ? 'bg-sage-500' : 'bg-warm-200'}`} />
           ))}
         </div>
-        <h3 className="font-serif text-2xl text-warm-900 mb-2">{current.title}</h3>
-        <p className="text-warm-700 leading-relaxed mb-6">{current.body}</p>
+        <h3 className="font-serif text-2xl text-warm-900 mb-3">{current.title}</h3>
+        <p className="text-warm-700 leading-relaxed mb-8 text-sm">{current.body}</p>
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => finish(true)}>Skip</Button>
           <div className="flex gap-2">
             {step > 0 && <Button variant="secondary" onClick={() => setStep(step - 1)}>Back</Button>}
             {step < WALKTHROUGH_STEPS.length - 1
               ? <Button onClick={() => setStep(step + 1)}>Next</Button>
-              : <Button onClick={() => finish(false)}>Start using Tether</Button>}
+              : <Button onClick={() => finish(false)}>Start</Button>}
           </div>
         </div>
       </div>
@@ -1028,8 +1039,10 @@ function Sidebar() {
   const unresolvedCount = useUnresolvedCount();
   const staleCount = useStaleCloseCount();
 
+  const isWalkthrough = state.phase === 'walkthrough';
+
   return (
-    <aside className="w-60 shrink-0 border-r border-warm-200 bg-warm-50 flex flex-col">
+    <aside className={`w-60 shrink-0 border-r border-warm-200 bg-warm-50 flex flex-col ${isWalkthrough ? 'relative z-[60]' : ''}`}>
       <div className="p-5">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-sage-600 flex items-center justify-center">
@@ -1043,9 +1056,10 @@ function Sidebar() {
           const active = state.activeTab === item.key;
           const badge = item.key === 'calendar' && unresolvedCount > 0 ? unresolvedCount
             : item.key === 'reconnect' && staleCount > 0 ? staleCount : null;
+          const isHighlight = isWalkthrough && active;
           return (
             <button key={item.key} onClick={() => setTab(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'}`}>
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
               <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
               {badge != null && <span className={`text-xs px-2 py-0.5 rounded-full ${active ? 'bg-warm-50/20 text-warm-50' : 'bg-sage-500 text-warm-50'}`}>{badge}</span>}
@@ -1056,9 +1070,11 @@ function Sidebar() {
       <div className="px-3 py-3 border-t border-warm-200 space-y-1">
         {NAV_UTIL.map((item) => {
           const active = state.activeTab === item.key;
+          const isHighlight = isWalkthrough && active;
+
           return (
             <button key={item.key} onClick={() => setTab(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'}`}>
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
               <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
             </button>
@@ -2869,7 +2885,7 @@ function Dashboard() {
   return (
     <div className="h-screen flex bg-warm-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto relative z-0">
         {tabs[state.activeTab] || <ReconnectTab />}
       </main>
     </div>
