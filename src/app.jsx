@@ -73,8 +73,9 @@ const importanceScore = (c) => {
   if (c.crmLabels.length > 0) s += 5;
   if (c.nudgeFrequencyDays != null) s += 10; // user cares enough to set a nudge
   // Recent interactions boost
-  if (c.lastContactedDaysAgo < 30) s += 5;
-  else if (c.lastContactedDaysAgo < 90) s += 2;
+  const d = daysSince(c.lastContactedAt);
+  if (d < 30) s += 5;
+  else if (d < 90) s += 2;
   // Completeness
   if (c.name && c.phone && c.email) s += 3;
   else if (c.email || c.phone) s += 1;
@@ -1321,11 +1322,7 @@ function ContactDrawer() {
               ) : (
                 <h2 className="font-serif text-2xl text-warm-900">{contact.name}</h2>
               )}
-              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                {cats.length > 0
-                  ? cats.map((c) => <CategoryPill key={c.key} category={c} onRemove={() => removeCrmLabelFromContact(contact.id, c.label)} />)
-                  : <span className="text-xs text-warm-500 italic">No Tether category</span>}
-              </div>
+
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
               </div>
@@ -1918,7 +1915,7 @@ function AddToCatchUpModal({ open, onClose }) {
 function AllContactsTab() {
   const { state, allCategories } = useApp();
   const { open: openDrawer } = useDrawer();
-  const [sort, setSort] = useState('importance');
+  const [sort, setSort] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [filter, setFilter] = useState('');
   const [query, setQuery] = useState('');
@@ -1952,11 +1949,42 @@ function AllContactsTab() {
       });
     }
     const dir = sortDir === 'asc' ? 1 : -1;
-    if (sort === 'importance') r.sort((a, b) => importanceScore(b) - importanceScore(a));
+    if (sort === 'importance') r.sort((a, b) => (importanceScore(b) - importanceScore(a)) || a.name.localeCompare(b.name));
     if (sort === 'name') r.sort((a, b) => a.name.localeCompare(b.name) * dir);
-    if (sort === 'location') r.sort((a, b) => (a.location?.city || '').localeCompare(b.location?.city || '') * dir);
-    if (sort === 'lastContacted') r.sort((a, b) => (a.lastContactedDaysAgo - b.lastContactedDaysAgo) * dir);
-    if (sort === 'category') r.sort((a, b) => (a.crmLabels[0] || 'z').localeCompare(b.crmLabels[0] || 'z'));
+    if (sort === 'location') r.sort((a, b) => {
+      const getLoc = (c) => (c.location ? `${c.location.city || ''}, ${c.location.country || ''}` : '').trim().toLowerCase();
+      const valA = getLoc(a);
+      const valB = getLoc(b);
+      
+      if (valA === valB) return a.name.localeCompare(b.name) * dir;
+      if (valA === '') return 1;  // Empty always at bottom
+      if (valB === '') return -1;
+      
+      return valA.localeCompare(valB) * dir;
+    });
+    if (sort === 'lastContacted') r.sort((a, b) => {
+      const valA = daysSince(a.lastContactedAt);
+      const valB = daysSince(b.lastContactedAt);
+      if (valA === valB) return a.name.localeCompare(b.name) * dir;
+      return (valA - valB) * dir;
+    });
+    if (sort === 'category') r.sort((a, b) => {
+      const getCat = (c) => {
+        const labels = c.googleLabels || [];
+        // Ignore generic system labels if others exist
+        const filtered = labels.filter(l => !['My Contacts', 'Starred', 'Chatted'].includes(l));
+        const first = filtered[0] || labels[0] || '';
+        return first.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+      };
+      const catA = getCat(a);
+      const catB = getCat(b);
+      
+      if (catA === catB) return a.name.localeCompare(b.name) * dir;
+      if (catA === '') return 1;  // Empty always at bottom
+      if (catB === '') return -1;
+      
+      return catA.localeCompare(catB) * dir;
+    });
     return r;
   }, [state.contacts, sort, sortDir, filter, query, allCategories]);
 
@@ -1971,19 +1999,7 @@ function AllContactsTab() {
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
           className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
       </div>
-      <div className="flex items-center gap-2">
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-surface">
-          <option value="importance">Sort: Importance</option>
-          <option value="name">Sort: Name</option>
-          <option value="lastContacted">Sort: Last contacted</option>
-          <option value="location">Sort: Location</option>
-          <option value="category">Sort: Category</option>
-        </select>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-warm-300 bg-surface">
-          <option value="">All categories</option>
-          {allCategories.map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
-        </select>
-      </div>
+
 
       <Card className="overflow-hidden">
         <table className="w-full border-collapse">
@@ -1992,7 +2008,9 @@ function AllContactsTab() {
               <th className="text-left py-3 px-4 border-r border-warm-200 cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('name')}>
                 Name{sortArrow('name')}
               </th>
-              <th className="text-left py-3 px-4 border-r border-warm-200 hidden md:table-cell">Category</th>
+              <th className="text-left py-3 px-4 border-r border-warm-200 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('category')}>
+                Category{sortArrow('category')}
+              </th>
               <th className="text-left py-3 px-4 border-r border-warm-200 hidden lg:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('location')}>
                 Location{sortArrow('location')}
               </th>
