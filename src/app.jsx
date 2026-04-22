@@ -1928,16 +1928,71 @@ function AddToCatchUpModal({ open, onClose }) {
 }
 
 // ───────────────────────────────────────────────────────────────────
+// IMPORT CONTACTS MODAL
+// ───────────────────────────────────────────────────────────────────
+
+function ImportContactsModal({ open, onClose }) {
+  const { setState } = useApp();
+
+  const handleGoogleImport = () => {
+    setState((s) => ({ ...s, phase: 'syncing' }));
+    onClose();
+  };
+
+  const options = [
+    { id: 'google', label: 'Google Contacts', icon: Icons.google, enabled: true, onClick: handleGoogleImport },
+    { id: 'csv', label: 'CSV File', icon: Icons.externalLink, enabled: false },
+    { id: 'vcard', label: 'vCard File', icon: Icons.externalLink, enabled: false },
+    { id: 'icloud', label: 'iCloud Account', icon: Icons.externalLink, enabled: false },
+    { id: 'sim', label: 'Phone SIM', icon: Icons.externalLink, enabled: false },
+  ];
+
+  return (
+    <Modal open={open} onClose={onClose} title="Import Contacts" size="md">
+      <div className="p-6 space-y-4">
+        <p className="text-sm text-warm-700">Choose where you'd like to import your contacts from:</p>
+        <div className="grid gap-3">
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              disabled={!opt.enabled}
+              onClick={opt.onClick}
+              className={`flex items-center gap-4 p-4 rounded-xl border transition text-left ${opt.enabled
+                ? 'border-warm-200 bg-surface hover:bg-warm-50 hover:border-sage-300'
+                : 'border-warm-100 bg-warm-50/50 opacity-60 cursor-not-allowed'
+                }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-warm-100 flex items-center justify-center text-warm-600">
+                {opt.icon}
+              </div>
+              <div className="flex-1">
+                <div className="font-medium text-warm-900">{opt.label}</div>
+                {!opt.enabled && <div className="text-xs text-warm-500">Coming soon</div>}
+              </div>
+              {opt.enabled && <div className="text-sage-600">{Icons.plus}</div>}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end pt-4">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
 // ALL CONTACTS TAB
 // ───────────────────────────────────────────────────────────────────
 
 function AllContactsTab() {
   const { state, allCategories } = useApp();
   const { open: openDrawer } = useDrawer();
-  const [sort, setSort] = useState('name');
+  const [sort, setSort] = useState('importance');
   const [sortDir, setSortDir] = useState('asc');
   const [filter, setFilter] = useState('');
   const [query, setQuery] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
 
   const handleSort = (key) => {
     if (sort === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
@@ -1974,11 +2029,11 @@ function AllContactsTab() {
       const getLoc = (c) => (c.location ? `${c.location.city || ''}, ${c.location.country || ''}` : '').trim().toLowerCase();
       const valA = getLoc(a);
       const valB = getLoc(b);
-      
+
       if (valA === valB) return a.name.localeCompare(b.name) * dir;
       if (valA === '') return 1;  // Empty always at bottom
       if (valB === '') return -1;
-      
+
       return valA.localeCompare(valB) * dir;
     });
     if (sort === 'lastContacted') r.sort((a, b) => {
@@ -1997,11 +2052,11 @@ function AllContactsTab() {
       };
       const catA = getCat(a);
       const catB = getCat(b);
-      
+
       if (catA === catB) return a.name.localeCompare(b.name) * dir;
       if (catA === '') return 1;  // Empty always at bottom
       if (catB === '') return -1;
-      
+
       return catA.localeCompare(catB) * dir;
     });
     return r;
@@ -2009,70 +2064,100 @@ function AllContactsTab() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-4">
-      <div>
-        <h1 className="font-serif text-3xl text-warm-900">All Contacts</h1>
-        <p className="text-warm-600 mt-1">{state.contacts.length} contacts from Google — sorted by {sort === 'importance' ? 'inferred importance' : sort}.</p>
-      </div>
-      <div className="relative w-full">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
-          className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-3xl text-warm-900">All Contacts</h1>
+          <p className="text-warm-600 mt-1">
+            {state.contacts.length === 0
+              ? 'Your address book is empty.'
+              : `${state.contacts.length} contacts — sorted by ${sort === 'importance' ? 'inferred importance' : sort}.`}
+          </p>
+        </div>
+        {state.contacts.length > 0 && <Button size="sm" onClick={() => setImportOpen(true)} icon={Icons.plus}>Import</Button>}
       </div>
 
+      {state.contacts.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center min-h-[320px] text-center p-10 space-y-6">
+          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
+            <div className="scale-[2]">{Icons.contacts}</div>
+          </div>
+          <div className="max-w-md">
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">No contacts yet</h2>
+            <p className="text-warm-700">
+              Import your contacts to start staying tethered to the people who matter. You can sync from Google or upload files.
+            </p>
+          </div>
+          <Button size="lg" onClick={() => setImportOpen(true)} icon={Icons.plus}>Import contacts</Button>
+        </Card>
+      ) : (
+        <>
+          <div className="relative w-full">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
+              className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
+          </div>
 
-      <Card className="overflow-hidden">
-        <table className="w-full border-collapse">
-          <thead className="bg-warm-100 text-xs text-warm-700 uppercase">
-            <tr>
-              <th className="text-left py-3 px-4 border-r border-warm-200 cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('name')}>
-                Name{sortArrow('name')}
-              </th>
-              <th className="text-left py-3 px-4 border-r border-warm-200 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('category')}>
-                Category{sortArrow('category')}
-              </th>
-              <th className="text-left py-3 px-4 border-r border-warm-200 hidden lg:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('location')}>
-                Location{sortArrow('location')}
-              </th>
-              <th className="text-left py-3 px-4 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('lastContacted')}>
-                Last contacted{sortArrow('lastContacted')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c) => {
-              const cats = categoriesFor(c, state.customCategories);
-              const multi = cats.length > 1;
-              return (
-                <tr key={c.id} onClick={() => openDrawer(c.id)}
-                  className="border-t border-warm-100 hover:bg-warm-50 cursor-pointer">
-                  <td className="py-3 px-4 border-r border-warm-200">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <Avatar contact={c} size={36} />
-                        {multi && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full" style={{ background: MULTI_COLOR, border: '2px solid white' }} />}
-                      </div>
-                      <div>
-                        <div className="font-medium text-warm-900">{c.name}</div>
-                        <div className="text-xs text-warm-600">{c.email || c.phone || '—'}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 border-r border-warm-200 hidden md:table-cell">
-                    <div className="flex flex-wrap gap-1">
-                      {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
-                      {c.googleLabels.filter((l) => !l.startsWith('CRM:')).map((l) => <Tag key={l} label={l} />)}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 border-r border-warm-200 hidden lg:table-cell text-sm text-warm-700">
-                    {c.location ? `${c.location.city}, ${c.location.country}` : '—'}
-                  </td>
-                  <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
+          <Card className="overflow-hidden">
+            <table className="w-full border-collapse">
+              <thead className="bg-warm-100 text-xs text-warm-700 uppercase">
+                <tr>
+                  <th className="text-left py-3 px-4 border-r border-warm-200 cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('name')}>
+                    Name{sortArrow('name')}
+                  </th>
+                  <th className="text-left py-3 px-4 border-r border-warm-200 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('category')}>
+                    Category{sortArrow('category')}
+                  </th>
+                  <th className="text-left py-3 px-4 border-r border-warm-200 hidden lg:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('location')}>
+                    Location{sortArrow('location')}
+                  </th>
+                  <th className="text-left py-3 px-4 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('lastContacted')}>
+                    Last contacted{sortArrow('lastContacted')}
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
+              </thead>
+              <tbody className="divide-y divide-warm-100">
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="py-20 text-center text-warm-500 italic">No contacts match your search.</td>
+                  </tr>
+                ) : rows.map((c) => {
+                  const cats = categoriesFor(c, state.customCategories);
+                  const multi = cats.length > 1;
+                  return (
+                    <tr key={c.id} onClick={() => openDrawer(c.id)}
+                      className="hover:bg-warm-50 cursor-pointer transition">
+                      <td className="py-3 px-4 border-r border-warm-200">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Avatar contact={c} size={36} />
+                            {multi && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full" style={{ background: MULTI_COLOR, border: '2px solid white' }} />}
+                          </div>
+                          <div>
+                            <div className="font-medium text-warm-900">{c.name}</div>
+                            <div className="text-xs text-warm-600">{c.email || c.phone || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 border-r border-warm-200 hidden md:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
+                          {c.googleLabels.filter((l) => !l.startsWith('CRM:')).map((l) => <Tag key={l} label={l} />)}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 border-r border-warm-200 hidden lg:table-cell text-sm text-warm-700">
+                        {c.location ? `${c.location.city}, ${c.location.country}` : '—'}
+                      </td>
+                      <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
+
+      <ImportContactsModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
@@ -2163,7 +2248,7 @@ function EventRow({ event }) {
               style={{ background: colorFor(c, state.customCategories) + '1a', border: `1px solid ${colorFor(c, state.customCategories)}33` }}>
               <Avatar contact={c} size={20} />
               <span className="text-xs font-medium" style={{ color: colorFor(c, state.customCategories) }}>{c.name}</span>
-              <div 
+              <div
                 onClick={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
                 className="absolute -top-1.5 -right-1.5 hidden group-hover:flex bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] items-center justify-center shadow-sm z-10"
               >×</div>
