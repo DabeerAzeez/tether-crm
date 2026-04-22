@@ -193,9 +193,11 @@ const Icons = {
 // ───────────────────────────────────────────────────────────────────
 
 const Avatar = ({ contact, size = 40, ring = false }) => {
+  const [imgError, setImgError] = useState(false);
   const { initials, hue } = contact.avatar || { initials: (contact.name || '?').slice(0, 2).toUpperCase(), hue: 200 };
   const ringClass = ring ? 'ring-2 ring-warm-200 ring-offset-2 ring-offset-warm-50' : '';
-  if (contact.photoUrl) {
+
+  if (contact.photoUrl && !imgError) {
     return (
       <img
         src={contact.photoUrl}
@@ -203,13 +205,11 @@ const Avatar = ({ contact, size = 40, ring = false }) => {
         referrerPolicy="no-referrer"
         className={`shrink-0 rounded-full object-cover select-none ${ringClass}`}
         style={{ width: size, height: size }}
-        onError={(e) => {
-          e.currentTarget.style.display = 'none';
-          e.currentTarget.nextSibling.style.display = 'flex';
-        }}
+        onError={() => setImgError(true)}
       />
     );
   }
+
   return (
     <div
       className={`shrink-0 rounded-full flex items-center justify-center text-white font-semibold select-none ${ringClass}`}
@@ -1087,7 +1087,7 @@ function Sidebar() {
       </div>
       {state.googleProfile && (
         <div className="p-4 border-t border-warm-200 flex items-center gap-3">
-          <Avatar contact={{ name: state.googleProfile.name, avatar: state.googleProfile.picture }} size={32} />
+          <Avatar contact={{ name: state.googleProfile.name, photoUrl: state.googleProfile.picture }} size={32} />
           <div className="min-w-0">
             <div className="text-sm font-medium text-warm-900 truncate">{state.googleProfile.name}</div>
             <div className="text-xs text-warm-600 truncate">{state.googleProfile.email}</div>
@@ -2887,7 +2887,7 @@ function SettingsTab() {
       <Card className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">Account</h3>
         <div className="flex items-center gap-3">
-          {state.googleProfile && <Avatar contact={{ name: state.googleProfile.name, avatar: state.googleProfile.picture }} size={40} />}
+          {state.googleProfile && <Avatar contact={{ name: state.googleProfile.name, photoUrl: state.googleProfile.picture }} size={40} />}
           <div>
             <div className="font-medium">{state.googleProfile?.name}</div>
             <div className="text-xs text-warm-600">{state.googleProfile?.email}</div>
