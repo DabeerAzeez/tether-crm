@@ -511,7 +511,7 @@
   const googleProfile = {
     name: 'Julia Rivera',
     email: 'julia.rivera@gmail.com',
-    picture: { initials: 'JR', hue: 140 },
+    picture: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=128&h=128&fit=crop',
   };
 
   // --- Reserved CRM categories -----------------------------------------
