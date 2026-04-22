@@ -1,8 +1,15 @@
-/* Tether — Google integration (OAuth, People API, Calendar API).
+/* Tether — Google integration (OAuth, People API read-only seed, Drive appData storage).
    Exposes window.TetherGoogle. No backend. Uses Google Identity Services (token flow)
    plus gapi.client for API calls. Requires a Google OAuth 2.0 Web Client ID with:
-     • People API + Calendar API enabled
+     • People API + Google Calendar API + Google Drive API enabled
      • The current origin added to "Authorized JavaScript origins"
+
+   Storage model:
+     All contact data is persisted in a single JSON file in the user's hidden
+     Google Drive appDataFolder (invisible to the user, not deletable from Drive UI):
+       tether_contacts_v1.json
+     On first sign-in, contacts are seeded from Google People API (read-only).
+     All subsequent saves go only to the Drive file — People API is never written to.
 */
 
 (function () {
@@ -11,24 +18,26 @@
     'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
   ];
   const SCOPES = [
-    'https://www.googleapis.com/auth/contacts',
+    'https://www.googleapis.com/auth/contacts.readonly',
     'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/drive.appdata',
     'openid', 'profile', 'email',
   ].join(' ');
   const TOKEN_STORAGE_KEY = 'tether-google-token';
+  const DRIVE_FILE_NAME = 'tether_contacts_v1.json';
 
   let tokenClient = null;
   let gapiReady = false;
   let currentClientId = null;
   let currentToken = null;
 
+  // Cache the Drive file ID so we don't re-query on every save
+  let _driveFileId = null;
+
   const waitFor = (test, timeout = 15000) => new Promise((resolve, reject) => {
     const start = Date.now();
     const tick = () => {
-      try {
-        const v = test();
-        if (v) return resolve(v);
-      } catch (e) {}
+      try { const v = test(); if (v) return resolve(v); } catch (e) {}
       if (Date.now() - start > timeout) return reject(new Error('Timed out waiting for Google scripts to load'));
       setTimeout(tick, 60);
     };
@@ -73,9 +82,7 @@
         } catch (e) {}
         resolve(resp);
       };
-      try {
-        tokenClient.requestAccessToken({ prompt });
-      } catch (e) { reject(e); }
+      try { tokenClient.requestAccessToken({ prompt }); } catch (e) { reject(e); }
     });
   }
 
@@ -88,6 +95,130 @@
     return r.json();
   }
 
+  // ─── Drive appDataFolder helpers ─────────────────────────────────
+  // Uses gapi.client.request() for metadata operations (correct CORS handling)
+  // Uses fetch() with correct upload URLs for media operations
+
+  function authHeaders() {
+    if (!currentToken || !currentToken.access_token) throw new Error('Not signed in');
+    return { Authorization: `Bearer ${currentToken.access_token}` };
+  }
+
+  /** Find the tether file in appDataFolder. Returns file id or null. */
+  async function findAppDataFile() {
+    if (_driveFileId) return _driveFileId;
+
+    const r = await gapi.client.request({
+      path: 'https://www.googleapis.com/drive/v3/files',
+      method: 'GET',
+      params: {
+        q: `name='${DRIVE_FILE_NAME}' and 'appDataFolder' in parents`,
+        spaces: 'appDataFolder',
+        fields: 'files(id,name)',
+        pageSize: 1,
+      },
+    });
+
+    const files = r.result.files || [];
+    if (files.length > 0) {
+      _driveFileId = files[0].id;
+      return _driveFileId;
+    }
+    return null;
+  }
+
+  /** Read tether_contacts_v1.json from appDataFolder. Returns parsed object or null. */
+  async function readAppData() {
+    try {
+      const fileId = await findAppDataFile();
+      if (!fileId) return null;
+
+      // Use fetch for media download — gapi.client.request doesn't handle alt=media well
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        console.error(`[Tether] Drive read failed: ${res.status}`);
+        return null;
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('[Tether] readAppData error:', e);
+      return null;
+    }
+  }
+
+  /** Write contacts payload to tether_contacts_v1.json in appDataFolder. */
+  async function writeAppData(payload) {
+    const content = JSON.stringify(payload);
+    const token = (currentToken || {}).access_token;
+    if (!token) throw new Error('Not signed in');
+
+    const fileId = await findAppDataFile();
+
+    if (fileId) {
+      // ── Update existing file ───────────────────────────────────
+      // PATCH /upload/drive/v3/files/{id}?uploadType=media
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: content,
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Drive update failed (${res.status})`);
+      }
+      return await res.json();
+    } else {
+      // ── Create new file via multipart upload ───────────────────
+      // POST /upload/drive/v3/files?uploadType=multipart
+      const boundary = 'tether_mp_boundary_' + Math.random().toString(36).slice(2);
+      const metadata = JSON.stringify({
+        name: DRIVE_FILE_NAME,
+        parents: ['appDataFolder'],
+        mimeType: 'application/json',
+      });
+      const body = [
+        `--${boundary}`,
+        'Content-Type: application/json; charset=UTF-8',
+        '',
+        metadata,
+        `--${boundary}`,
+        'Content-Type: application/json',
+        '',
+        content,
+        `--${boundary}--`,
+      ].join('\r\n');
+
+      const res = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+          },
+          body,
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Drive create failed (${res.status})`);
+      }
+      const result = await res.json();
+      _driveFileId = result.id; // cache it
+      return result;
+    }
+  }
+
+  // ─── Google Contacts seed (read-only) ────────────────────────────
+
   async function listContactGroups() {
     const map = {};
     let pageToken;
@@ -96,10 +227,7 @@
         pageSize: 200, pageToken, groupFields: 'name,groupType,memberCount',
       });
       (r.result.contactGroups || []).forEach((g) => {
-        map[g.resourceName] = {
-          name: g.formattedName || g.name,
-          type: g.groupType, // SYSTEM_CONTACT_GROUP | USER_CONTACT_GROUP
-        };
+        map[g.resourceName] = { name: g.formattedName || g.name, type: g.groupType };
       });
       pageToken = r.result.nextPageToken;
     } while (pageToken);
@@ -162,35 +290,26 @@
 
     const orgObj = (p.organizations && (p.organizations.find((o) => o.metadata && o.metadata.primary) || p.organizations[0])) || null;
     const urls = p.urls || [];
-    const findUrl = (re) => {
-      const hit = urls.find((u) => u.value && re.test(u.value));
-      return hit ? hit.value : '';
-    };
+    const findUrl = (re) => { const hit = urls.find((u) => u.value && re.test(u.value)); return hit ? hit.value : ''; };
 
     const labels = [];
     (p.memberships || []).forEach((m) => {
       const ref = m.contactGroupMembership && m.contactGroupMembership.contactGroupResourceName;
       if (!ref) return;
       const g = groupsMap[ref];
-      if (!g) return;
-      if (g.type === 'SYSTEM_CONTACT_GROUP') return;
-      if (g.name) labels.push(g.name);
+      if (!g || g.type === 'SYSTEM_CONTACT_GROUP' || !g.name) return;
+      labels.push(g.name);
     });
 
     const crmLabels = labels.filter((l) => /^CRM:/i.test(l));
     const googleLabels = labels.filter((l) => !/^CRM:/i.test(l));
-
     const initials = (name || '?').split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
     const hue = hashHue(p.resourceName || name);
 
     return {
       id: p.resourceName,
-      name,
-      email,
-      phone,
-      googleLabels,
-      crmLabels,
-      location,
+      name, email, phone,
+      googleLabels, crmLabels, location,
       linkedin: findUrl(/linkedin\.com/i),
       instagram: findUrl(/instagram\.com/i),
       facebook: findUrl(/facebook\.com/i),
@@ -208,9 +327,10 @@
       nudgeFrequencyDays: null,
       avatar: { initials, hue },
       photoUrl: photo,
-      etag: p.etag,
     };
   }
+
+  // ─── Calendar ────────────────────────────────────────────────────
 
   async function listEvents({ pastDays = 90, futureDays = 30 } = {}) {
     const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString();
@@ -221,11 +341,7 @@
       const r = await window.gapi.client.calendar.events.list({
         calendarId: 'primary',
         timeMin, timeMax,
-        showDeleted: false,
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 250,
-        pageToken,
+        showDeleted: false, singleEvents: true, orderBy: 'startTime', maxResults: 250, pageToken,
       });
       (r.result.items || []).forEach((e) => all.push(e));
       pageToken = r.result.nextPageToken;
@@ -237,44 +353,37 @@
     const start = (e.start && (e.start.dateTime || e.start.date)) || '';
     const end = (e.end && (e.end.dateTime || e.end.date)) || '';
     return {
-      id: e.id,
-      title: e.summary || '(no title)',
-      start,
-      end,
-      location: e.location || '',
-      description: e.description || '',
+      id: e.id, title: e.summary || '(no title)', start, end,
+      location: e.location || '', description: e.description || '',
       guestEmails: (e.attendees || []).map((a) => a.email).filter(Boolean),
       organizerEmail: (e.organizer && e.organizer.email) || '',
-      htmlLink: e.htmlLink || '',
-      synthetic: false,
+      htmlLink: e.htmlLink || '', synthetic: false,
     };
   }
 
   function computeLastContacted(contacts, events) {
     const byEmail = {};
     contacts.forEach((c) => { if (c.email) byEmail[c.email.toLowerCase()] = c.id; });
-    const latest = {}; // id -> iso
+    const latest = {};
     events.forEach((e) => {
       if (!e.start) return;
-      const ts = e.start;
       (e.guestEmails || []).forEach((em) => {
         const id = byEmail[em.toLowerCase()];
         if (!id) return;
-        if (!latest[id] || ts > latest[id]) latest[id] = ts;
+        if (!latest[id] || e.start > latest[id]) latest[id] = e.start;
       });
     });
     const now = Date.now();
     return contacts.map((c) => {
       const iso = latest[c.id];
       if (!iso) return c;
+      // Only update if calendar event is more recent than logged interactions
+      if (c.lastContactedAt && c.lastContactedAt >= iso) return c;
       const days = Math.floor((now - new Date(iso).getTime()) / 86400000);
       return { ...c, lastContactedAt: iso, lastContactedDaysAgo: Math.max(0, days) };
     });
   }
 
-  // For birthday events like "Mom's Birthday", auto-add the matched contact to guestEmails
-  // so they show as a resolved chip without requiring manual confirmation.
-  // Only resolves when there is exactly one contact with that name (case-insensitive).
   function resolveBirthdayAttendees(contacts, events) {
     const byNameLower = {};
     contacts.forEach((c) => {
@@ -293,89 +402,73 @@
     });
   }
 
+  // ─── Main sync ───────────────────────────────────────────────────
+
+  /**
+   * syncAll: loads app state from Drive appDataFolder + Google Calendar.
+   *
+   * Strategy:
+   *   1. Try to read tether_contacts_v1.json from appDataFolder.
+   *   2. If found → use stored contacts as source of truth.
+   *   3. If NOT found → seed from Google People API (read-only), write to Drive.
+   *   4. Always fetch Calendar fresh for event cross-referencing.
+   */
   async function syncAll(onProgress) {
     const report = (label, pct) => { if (onProgress) onProgress({ label, pct }); };
-    report('Loading contact labels…', 15);
-    const groupsMap = await listContactGroups();
-    report('Fetching contacts…', 25);
-    const persons = await listConnections((loaded, total) => {
-      const pct = total ? 25 + Math.min(45, Math.round((loaded / total) * 45)) : 45;
-      report(`Fetched ${loaded}${total ? ` of ${total}` : ''} contacts`, pct);
-    });
-    report('Mapping contacts…', 72);
-    let contacts = persons.map((p) => personToContact(p, groupsMap));
-    report('Fetching calendar (last 3 months + upcoming)…', 80);
+
+    report('Checking Drive for saved data…', 10);
+    const driveData = await readAppData();
+
+    let contacts;
+    if (driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0) {
+      report('Loading contacts from Drive…', 50);
+      contacts = driveData.contacts;
+    } else {
+      // First-time: seed from Google Contacts
+      report('First sync — reading Google Contacts…', 15);
+      const groupsMap = await listContactGroups();
+      report('Fetching contacts…', 25);
+      const persons = await listConnections((loaded, total) => {
+        const pct = total ? 25 + Math.min(35, Math.round((loaded / total) * 35)) : 50;
+        report(`Fetched ${loaded}${total ? ` of ${total}` : ''} contacts`, pct);
+      });
+      report('Mapping contacts…', 62);
+      contacts = persons.map((p) => personToContact(p, groupsMap));
+    }
+
+    // Calendar is always fetched fresh
+    report('Fetching calendar…', 70);
     const rawEvents = await listEvents({ pastDays: 90, futureDays: 30 });
     let events = rawEvents.map(eventToSimple);
-    report('Cross-referencing attendees…', 92);
+
+    report('Cross-referencing attendees…', 85);
     contacts = computeLastContacted(contacts, events);
     events = resolveBirthdayAttendees(contacts, events);
+
+    // If this was a fresh seed, write to Drive now
+    if (!driveData || !driveData.contacts || driveData.contacts.length === 0) {
+      report('Saving initial data to Drive…', 93);
+      try {
+        await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
+      } catch (e) {
+        console.error('[Tether] Failed to write initial Drive file:', e);
+        // Non-fatal: contacts are in memory, user can still use the app
+      }
+    }
+
     report('Done', 100);
     return { contacts, events };
   }
 
-  async function updatePerson(contact, patch) {
-    // Maps app-format patch fields back to Google People API format and PATCHes the contact.
-    // Returns the updated etag from the response (needed for future writes).
-    const resource = { etag: contact.etag };
-    const updateFields = [];
-
-    if ('name' in patch) {
-      resource.names = patch.name ? [{ unstructuredName: patch.name }] : [];
-      updateFields.push('names');
-    }
-    if ('email' in patch) {
-      resource.emailAddresses = patch.email ? [{ value: patch.email }] : [];
-      updateFields.push('emailAddresses');
-    }
-    if ('phone' in patch) {
-      resource.phoneNumbers = patch.phone ? [{ value: patch.phone }] : [];
-      updateFields.push('phoneNumbers');
-    }
-    if ('notes' in patch) {
-      resource.biographies = patch.notes ? [{ value: patch.notes, contentType: 'TEXT_PLAIN' }] : [];
-      updateFields.push('biographies');
-    }
-    if ('linkedin' in patch || 'instagram' in patch || 'facebook' in patch || 'website' in patch) {
-      const urls = [];
-      const li = ('linkedin' in patch ? patch.linkedin : contact.linkedin) || '';
-      const ig = ('instagram' in patch ? patch.instagram : contact.instagram) || '';
-      const fb = ('facebook' in patch ? patch.facebook : contact.facebook) || '';
-      const ws = ('website' in patch ? patch.website : contact.website) || '';
-      if (li) urls.push({ value: li, type: 'profile' });
-      if (ig) urls.push({ value: ig, type: 'profile' });
-      if (fb) urls.push({ value: fb, type: 'profile' });
-      if (ws) urls.push({ value: ws });
-      resource.urls = urls;
-      updateFields.push('urls');
-    }
-    if (patch.custom && ('company' in patch.custom || 'title' in patch.custom)) {
-      const company = patch.custom.company || '';
-      const title = patch.custom.title || '';
-      resource.organizations = (company || title) ? [{ name: company, title }] : [];
-      updateFields.push('organizations');
-    }
-    if ('location' in patch) {
-      resource.addresses = patch.location
-        ? [{ city: patch.location.city || '', country: patch.location.country || '', formattedValue: patch.location.raw || '' }]
-        : [];
-      updateFields.push('addresses');
-    }
-
-    if (!updateFields.length) return null;
-
-    await ensureGapi();
-    if (currentToken && currentToken.access_token) {
-      window.gapi.client.setToken({ access_token: currentToken.access_token });
-    }
-
-    const r = await window.gapi.client.people.people.updateContact({
-      resourceName: contact.id,
-      updatePersonFields: updateFields.join(','),
-      resource,
-    });
-    return r.result.etag || null;
+  /**
+   * saveContacts: persist the full contacts array to Drive appDataFolder.
+   * This is the ONLY write path — replaces all People API writes.
+   */
+  async function saveContacts(contacts) {
+    await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
   }
+
+  // ─── Token management ─────────────────────────────────────────────
 
   async function tryRestoreToken() {
     try {
@@ -390,17 +483,16 @@
       currentToken = { access_token };
       window.gapi.client.setToken({ access_token });
       return true;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   function hasToken() { return !!(currentToken && currentToken.access_token); }
 
   function revoke() {
     return new Promise((resolve) => {
+      _driveFileId = null;
       try { localStorage.removeItem(TOKEN_STORAGE_KEY); } catch (e) {}
-      if (currentToken && currentToken.access_token && window.google && window.google.accounts && window.google.accounts.oauth2) {
+      if (currentToken && currentToken.access_token && window.google?.accounts?.oauth2) {
         try {
           window.google.accounts.oauth2.revoke(currentToken.access_token, () => {
             currentToken = null;
@@ -420,7 +512,9 @@
     signIn,
     fetchProfile,
     syncAll,
-    updatePerson,
+    saveContacts,
+    readAppData,
+    writeAppData,
     tryRestoreToken,
     hasToken,
     revoke,

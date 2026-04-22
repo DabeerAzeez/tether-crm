@@ -324,6 +324,15 @@ function AppProvider({ children }) {
     });
   }, []);
 
+  // Persist the full contacts list to Drive appDataFolder (fire-and-forget, non-blocking)
+  const saveContactsToDrive = useCallback((contacts, demoMode) => {
+    if (demoMode) return;
+    if (!window.TetherGoogle || !window.TetherGoogle.hasToken()) return;
+    window.TetherGoogle.saveContacts(contacts).catch((e) => {
+      console.error('[Tether] Drive save failed:', e);
+    });
+  }, []);
+
   // Restore Google token on page load so writes work without re-signing in
   useEffect(() => {
     const s = loadState();
@@ -382,9 +391,10 @@ function AppProvider({ children }) {
         guestEmails: contact?.email ? [contact.email] : [],
         synthetic: true,
       };
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
       return { ...s, contacts, events: [syntheticEvent, ...s.events] };
     });
-  }, [setState]);
+  }, [setState, saveContactsToDrive]);
 
   const logInteractionMany = useCallback((contactIds, data) => {
     contactIds.forEach((id) => logInteraction(id, data));
@@ -442,9 +452,10 @@ function AppProvider({ children }) {
       const dismissedAttendeeIds = dismissKey && !s.dismissedAttendeeIds.includes(dismissKey)
         ? [...s.dismissedAttendeeIds, dismissKey]
         : s.dismissedAttendeeIds;
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
       return { ...s, events, contacts, dismissedAttendeeIds };
     });
-  }, [setState]);
+  }, [setState, saveContactsToDrive]);
 
   const dismissAttendee = useCallback((eventId, name) => {
     setState((s) => ({
@@ -587,13 +598,14 @@ function SignInScreen() {
                   <p><strong>One-time setup in Google Cloud:</strong></p>
                   <ol className="list-decimal list-inside space-y-1">
                     <li>Open <a className="underline text-sage-700" href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">console.cloud.google.com</a> and create (or pick) a project.</li>
-                    <li>Enable <strong>People API</strong> and <strong>Google Calendar API</strong> under APIs &amp; Services → Library.</li>
-                    <li>Under APIs &amp; Services → OAuth consent screen, create an "External" app, add your Gmail as a test user, and add scopes: <code className="font-mono">/auth/contacts</code>, <code className="font-mono">/auth/calendar.readonly</code>, <code className="font-mono">profile</code>, <code className="font-mono">email</code>.</li>
+                    <li>Enable <strong>People API</strong>, <strong>Google Calendar API</strong>, and <strong>Google Drive API</strong> under APIs &amp; Services → Library.</li>
+                    <li>Under APIs &amp; Services → OAuth consent screen, create an "External" app, add your Gmail as a test user, and add scopes: <code className="font-mono">contacts.readonly</code>, <code className="font-mono">calendar.readonly</code>, <code className="font-mono">drive.appdata</code>, <code className="font-mono">profile</code>, <code className="font-mono">email</code>.</li>
                     <li>Under Credentials → Create Credentials → <strong>OAuth client ID</strong> → Web application. Add this origin to <em>Authorized JavaScript origins</em>:
                       <div className="mt-1 font-mono bg-surface px-2 py-1 rounded border border-warm-300 break-all">{origin || '(open this page via http/https first)'}</div>
                     </li>
                     <li>Copy the Client ID and paste it above.</li>
                   </ol>
+                  <p className="text-warm-600"><strong>How Tether stores your data:</strong> All contact information is saved to a hidden file (<code className="font-mono">tether_contacts_v1.json</code>) in your Google Drive's private appData folder — invisible to you in Drive UI and not deletable accidentally. Google Contacts are read once to seed the initial list. After that, Tether never writes to Google Contacts.</p>
                   {origin.startsWith('file://') && (
                     <p className="text-red-700"><strong>Note:</strong> Google OAuth does not allow <code>file://</code> origins. Serve this folder over HTTP (e.g. <code className="font-mono">python -m http.server</code> or VS Code Live Server) and reopen.</p>
                   )}
@@ -1281,26 +1293,27 @@ function ContactDrawer() {
     const patch = {
       name: draft.name, email: draft.email, phone: draft.phone,
       linkedin: draft.linkedin, instagram: draft.instagram, facebook: draft.facebook, website: draft.website,
-      notes: draft.notes,
-      custom: draft.custom,
+      notes: draft.notes, custom: draft.custom,
       nudgeFrequencyDays: draft.nudgeFrequencyDays,
       location: draft.location,
     };
+
+    // Optimistically update local state first
+    const updatedContacts = state.contacts.map((c) => c.id === contact.id ? { ...c, ...patch } : c);
+    updateContact(contact.id, patch);
+    setEdit(false);
+
+    // Then persist the full array to Drive (single source of truth)
     if (!state.demoMode && window.TetherGoogle && window.TetherGoogle.hasToken()) {
       setSaving(true);
       try {
-        const newEtag = await window.TetherGoogle.updatePerson(contact, patch);
-        updateContact(contact.id, { ...patch, ...(newEtag ? { etag: newEtag } : {}) });
-        setEdit(false);
+        await window.TetherGoogle.saveContacts(updatedContacts);
       } catch (e) {
-        console.error('[Tether] Sync failed:', e);
-        setSyncErrorMsg(e?.result?.error?.message || e?.message || 'Unknown error');
+        console.error('[Tether] Drive save failed:', e);
+        setSyncErrorMsg(e?.message || 'Unknown error');
       } finally {
         setSaving(false);
       }
-    } else {
-      updateContact(contact.id, patch);
-      setEdit(false);
     }
   };
 
@@ -1313,7 +1326,7 @@ function ContactDrawer() {
       <div className="fixed inset-0 z-40 flex justify-end animate-fade-in" onClick={close}>
         <div className="absolute inset-0 bg-warm-900/40 drawer-backdrop" />
         <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-          <div className="p-6 border-b border-warm-200 flex items-start gap-4">
+          <div className="p-6 flex items-start gap-4">
             <Avatar contact={contact} size={64} ring />
             <div className="flex-1 min-w-0">
               {edit ? (
@@ -1327,31 +1340,30 @@ function ContactDrawer() {
                 {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
               </div>
             </div>
-            <button onClick={close} className="text-warm-600 hover:text-warm-900 p-1">{Icons.x}</button>
+            <div className="flex flex-col items-end gap-3">
+              <button onClick={close} className="text-warm-600 hover:text-warm-900 p-1">{Icons.x}</button>
+              <div className="flex gap-2">
+                {edit ? (
+                  <>
+                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
+                    <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Syncing...' : 'Save'}</Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="secondary" icon={Icons.edit} onClick={() => setEdit(true)}>Edit</Button>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Add category + actions */}
-          <div className="px-6 py-3 bg-warm-100/50 border-b border-warm-200 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Log interaction</Button>
-              {availableCats.length > 0 && (
-                <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
-                  className="px-3 py-1.5 rounded-lg border border-warm-300 bg-surface text-sm" defaultValue="">
-                  <option value="">+ Add category</option>
-                  {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
-                </select>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {edit ? (
-                <>
-                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
-                  <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save to Google'}</Button>
-                </>
-              ) : (
-                <Button size="sm" variant="secondary" icon={Icons.edit} onClick={() => setEdit(true)}>Edit</Button>
-              )}
-            </div>
+          {/* Add category */}
+          <div className="px-6 pb-2 flex items-center gap-2">
+            {availableCats.length > 0 && (
+              <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
+                className="px-3 py-1.5 rounded-lg border border-warm-300 bg-surface text-sm" defaultValue="">
+                <option value="">+ Add category</option>
+                {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
+              </select>
+            )}
           </div>
 
           <div className="p-6 space-y-6">
@@ -1452,19 +1464,26 @@ function ContactDrawer() {
             {/* History */}
             <section>
               <SectionHeader>Interaction history</SectionHeader>
-              <div className="space-y-2">
-                {contact.interactions.map((i) => (
-                  <div key={i.id} className="flex items-start gap-3 p-3 bg-surface rounded-lg border border-warm-200">
-                    <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-warm-900 capitalize">{i.type}</span>
-                        <span className="text-warm-500">· {formatDate(i.date)} ({relativeDate(i.date)})</span>
+              {contact.interactions.length === 0 ? (
+                <div className="text-sm text-warm-500 italic">No interactions have been recorded.</div>
+              ) : (
+                <div className="space-y-2">
+                  {contact.interactions.map((i) => (
+                    <div key={i.id} className="flex items-start gap-3 p-3 bg-surface rounded-lg border border-warm-200">
+                      <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium text-warm-900 capitalize">{i.type}</span>
+                          <span className="text-warm-500">· {formatDate(i.date)} ({relativeDate(i.date)})</span>
+                        </div>
+                        {i.note && <div className="text-xs text-warm-700 mt-0.5">{i.note}</div>}
                       </div>
-                      {i.note && <div className="text-xs text-warm-700 mt-0.5">{i.note}</div>}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+              <div className="mt-4">
+                <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Add an Interaction</Button>
               </div>
             </section>
           </div>
@@ -2533,7 +2552,7 @@ function MapTab() {
             )}
 
             <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="secondary" onClick={() => openLog(selectedContact.id)} className="flex-1">Log interaction</Button>
+              <Button size="sm" variant="secondary" onClick={() => openLog(selectedContact.id)} className="flex-1">Add an interaction</Button>
               <Button size="sm" variant="outline" onClick={() => { openDrawer(selectedContact.id); setSelectedId(null); }} className="flex-1">Full profile</Button>
             </div>
           </div>
@@ -2820,6 +2839,7 @@ function HelpTab() {
 
 function SettingsTab() {
   const { state, setState, setTheme } = useApp();
+  const [showRawData, setShowRawData] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
@@ -2968,6 +2988,33 @@ function SettingsTab() {
           <input type="checkbox" checked={state.calendarWriteEnabled} onChange={(e) => setState((s) => ({ ...s, calendarWriteEnabled: e.target.checked }))} />
           <span className="text-sm">Write logged interactions to Google Calendar (dedicated <strong>Personal CRM</strong> calendar, no guest invites).</span>
         </label>
+      </Card>
+
+      {/* Transparency Portal */}
+      <Card className="p-6 space-y-4">
+        <h3 className="font-serif text-lg text-warm-900">Transparency Portal</h3>
+        <p className="text-sm text-warm-700">
+          All your Tether data lives in a single hidden file (<code className="font-mono text-xs">tether_contacts_v1.json</code>) in your Google Drive's private <strong>appData</strong> folder — invisible in Drive UI, safe from accidental deletion.
+          Google Contacts are read once to seed your initial list, and never written to again.
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="secondary" onClick={() => {
+            const data = { contacts: state.contacts, version: 1, exportedAt: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tether_contacts_v1.json';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}>Export all data</Button>
+          <Button variant="outline" onClick={() => setShowRawData((v) => !v)}>{showRawData ? 'Hide' : 'View'} raw JSON</Button>
+        </div>
+        {showRawData && (
+          <pre className="p-4 bg-warm-100 rounded-lg text-xs font-mono text-warm-800 overflow-x-auto max-h-60 overflow-y-auto">
+            {JSON.stringify({ contacts: state.contacts.slice(0, 3), '...': `(${state.contacts.length} total contacts)` }, null, 2)}
+          </pre>
+        )}
       </Card>
 
       {/* Nudges */}
