@@ -405,59 +405,80 @@
   // ─── Main sync ───────────────────────────────────────────────────
 
   /**
-   * syncAll: loads app state from Drive appDataFolder + Google Calendar.
+   * loadFromDrive: loads app state from Drive appDataFolder + Google Calendar.
    *
    * Strategy:
    *   1. Try to read tether_contacts_v1.json from appDataFolder.
    *   2. If found → use stored contacts as source of truth.
-   *   3. If NOT found → seed from Google People API (read-only), write to Drive.
+   *   3. If NOT found → return empty contacts. Do NOT auto-import Google Contacts.
    *   4. Always fetch Calendar fresh for event cross-referencing.
    */
-  async function syncAll(onProgress) {
+  async function loadFromDrive(onProgress) {
     const report = (label, pct) => { if (onProgress) onProgress({ label, pct }); };
 
-    report('Checking Drive for saved data…', 10);
+    report('Checking Drive for saved data…', 20);
     const driveData = await readAppData();
 
-    let contacts;
+    let contacts = [];
     if (driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0) {
-      report('Loading contacts from Drive…', 50);
+      report('Loading contacts from Drive…', 60);
       contacts = driveData.contacts;
     } else {
-      // First-time: seed from Google Contacts
-      report('First sync — reading Google Contacts…', 15);
-      const groupsMap = await listContactGroups();
-      report('Fetching contacts…', 25);
-      const persons = await listConnections((loaded, total) => {
-        const pct = total ? 25 + Math.min(35, Math.round((loaded / total) * 35)) : 50;
-        report(`Fetched ${loaded}${total ? ` of ${total}` : ''} contacts`, pct);
-      });
-      report('Mapping contacts…', 62);
-      contacts = persons.map((p) => personToContact(p, groupsMap));
+      report('No existing data found — starting fresh…', 60);
+      // Blank state: user must manually trigger import
     }
 
     // Calendar is always fetched fresh
-    report('Fetching calendar…', 70);
-    const rawEvents = await listEvents({ pastDays: 90, futureDays: 30 });
-    let events = rawEvents.map(eventToSimple);
+    report('Fetching calendar…', 75);
+    let events = [];
+    try {
+      const rawEvents = await listEvents({ pastDays: 90, futureDays: 30 });
+      events = rawEvents.map(eventToSimple);
+    } catch (e) {
+      console.warn('[Tether] Calendar fetch failed (non-fatal):', e);
+    }
 
-    report('Cross-referencing attendees…', 85);
-    contacts = computeLastContacted(contacts, events);
-    events = resolveBirthdayAttendees(contacts, events);
-
-    // If this was a fresh seed, write to Drive now
-    if (!driveData || !driveData.contacts || driveData.contacts.length === 0) {
-      report('Saving initial data to Drive…', 93);
-      try {
-        await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
-      } catch (e) {
-        console.error('[Tether] Failed to write initial Drive file:', e);
-        // Non-fatal: contacts are in memory, user can still use the app
-      }
+    if (contacts.length > 0) {
+      report('Cross-referencing attendees…', 90);
+      contacts = computeLastContacted(contacts, events);
+      events = resolveBirthdayAttendees(contacts, events);
     }
 
     report('Done', 100);
-    return { contacts, events };
+    return { contacts, events, hasExistingData: !!(driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0) };
+  }
+
+  /**
+   * importContactsFromGoogle: user-triggered import from Google People API.
+   * Fetches contacts, geocodes, saves to Drive, and returns the result.
+   */
+  async function importContactsFromGoogle(onProgress) {
+    const report = (label, pct) => { if (onProgress) onProgress({ label, pct }); };
+
+    report('Reading Google Contacts…', 10);
+    const groupsMap = await listContactGroups();
+    report('Fetching contacts…', 20);
+    const persons = await listConnections((loaded, total) => {
+      const pct = total ? 20 + Math.min(40, Math.round((loaded / total) * 40)) : 55;
+      report(`Fetched ${loaded}${total ? ` of ${total}` : ''} contacts`, pct);
+    });
+    report('Mapping contacts…', 65);
+    const contacts = persons.map((p) => personToContact(p, groupsMap));
+
+    report('Saving to Drive…', 85);
+    try {
+      await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
+    } catch (e) {
+      console.error('[Tether] Failed to write Drive file after import:', e);
+    }
+
+    report('Done', 100);
+    return contacts;
+  }
+
+  // Keep syncAll as an alias for backward-compat (calls loadFromDrive)
+  async function syncAll(onProgress) {
+    return loadFromDrive(onProgress);
   }
 
   /**
@@ -512,6 +533,8 @@
     signIn,
     fetchProfile,
     syncAll,
+    loadFromDrive,
+    importContactsFromGoogle,
     saveContacts,
     readAppData,
     writeAppData,

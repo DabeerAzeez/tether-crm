@@ -8,16 +8,12 @@ const { useState, useEffect, useMemo, useRef, useCallback, createContext, useCon
 // ───────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'tether-state-v1';
-const CLIENT_ID_KEY = 'tether-google-client-id';
 const MULTI_COLOR = 'var(--cat-multi)';
 
 const loadClientId = () => {
   try {
-    return (window.TETHER_CONFIG?.GOOGLE_OAUTH_CLIENT_ID) || localStorage.getItem(CLIENT_ID_KEY) || '';
+    return (window.TETHER_CONFIG?.GOOGLE_OAUTH_CLIENT_ID) || '';
   } catch (e) { return ''; }
-};
-const saveClientId = (id) => {
-  try { localStorage.setItem(CLIENT_ID_KEY, id); } catch (e) { }
 };
 
 // Tether no longer imposes its own category taxonomy — users organize contacts with the labels
@@ -129,7 +125,7 @@ const defaultState = () => ({
   events: [],
   customCategories: [], // user-added CRM: labels
   theme: 'light', // light | dark
-  activeTab: 'reconnect',
+  activeTab: 'contacts',
   llm: { provider: 'demo', apiKey: '', endpoint: '' },
   calendarWriteEnabled: false,
   nudges: {
@@ -141,6 +137,7 @@ const defaultState = () => ({
   walkthroughDone: false,
   onboardingMappings: {}, // googleLabel -> crmKey
   selectedCloseFriendIds: [],
+  isImporting: false,
 });
 
 const loadState = () => {
@@ -179,14 +176,23 @@ const Icons = {
   pin: <Icon d={<><path d="M20 10c0 7-8 13-8 13S4 17 4 10a8 8 0 1 1 16 0z" /><circle cx="12" cy="10" r="3" /></>} />,
   edit: <Icon d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
   externalLink: <Icon d={<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></>} />,
+  chevronLeft: <Icon d="M15 18l-6-6 6-6" />,
+  star: <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
+  trash: <Icon d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+  more: <Icon d="M12 12h.01M12 5h.01M12 19h.01" />,
+  mail: <Icon d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" />,
+  chat: <Icon d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  video: <Icon d="M23 7l-7 5 7 5V7zM1 5h14v14H1V5z" />,
+  pencil: <Icon d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />,
   google: <svg viewBox="0 0 48 48" className="w-5 h-5"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" /><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.1 35 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.6l6.2 5.2C41.3 34.8 44 29.8 44 24c0-1.2-.1-2.4-.4-3.5z" /></svg>,
   logo: (
-    <svg viewBox="0 0 32 32" className="w-6 h-6">
-      <path d="M16 3c3 4 7 7 7 12a7 7 0 1 1-14 0c0-5 4-8 7-12z" fill="var(--sage-500)" />
-      <path d="M16 11v15" stroke="var(--warm-800)" strokeWidth="1.5" strokeLinecap="round" />
+    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   ),
 };
+
 
 // ───────────────────────────────────────────────────────────────────
 // Small UI primitives
@@ -302,6 +308,7 @@ const Modal = ({ open, onClose, children, title, size = 'md' }) => {
     </div>
   );
 };
+
 
 // ───────────────────────────────────────────────────────────────────
 // App context
@@ -500,28 +507,14 @@ function AppProvider({ children }) {
 
 function SignInScreen() {
   const { setState } = useApp();
-  const [clientId, setClientId] = useState(() => loadClientId());
-  const [editingId, setEditingId] = useState(() => !loadClientId());
-  const [pendingId, setPendingId] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [showSetup, setShowSetup] = useState(false);
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-
-  const saveClient = () => {
-    const v = pendingId.trim();
-    if (!v) { setErr('Paste the OAuth Client ID first.'); return; }
-    saveClientId(v);
-    setClientId(v);
-    setEditingId(false);
-    setErr('');
-  };
 
   const connectGoogle = async () => {
     setErr('');
     setBusy(true);
     try {
+      const clientId = loadClientId();
       await window.TetherGoogle.init(clientId);
       await window.TetherGoogle.signIn({ prompt: 'consent' });
       const profile = await window.TetherGoogle.fetchProfile();
@@ -538,110 +531,50 @@ function SignInScreen() {
       }));
     } catch (e) {
       console.error(e);
-      setErr(e && e.message ? e.message : 'Sign-in failed');
+      setErr(e && e.message ? e.message : 'Sign-in failed. Check that your OAuth Client ID is configured correctly.');
     } finally {
       setBusy(false);
     }
   };
 
-  const useDemo = () => {
-    const mock = window.TETHER_MOCK;
-    setState((s) => ({
-      ...s,
-      phase: 'syncing',
-      googleSignedIn: true,
-      googleProfile: mock.googleProfile,
-      contacts: mock.contacts.map((c) => ({ ...c, crmLabels: [] })),
-      events: mock.events.map((e) => ({ ...e })),
-      demoMode: true,
-    }));
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-warm-50 via-warm-100 to-sage-100">
-      <div className="max-w-lg w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-sage-600 flex items-center justify-center shadow-lg">
-              <div className="scale-150 text-warm-50">{Icons.logo}</div>
-            </div>
-            <span className="font-serif text-3xl font-semibold text-warm-900">Tether</span>
-          </div>
-          <h1 className="font-serif text-4xl text-warm-900 mb-3">Stay tethered to the people who matter.</h1>
-          <p className="text-warm-700 leading-relaxed">
-            A private, open-source personal CRM that sits on top of your Google Contacts and Calendar.
-          </p>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-warm-50 via-warm-100 to-sage-100">
+      <div className="flex flex-col items-center text-center max-w-md w-full gap-6">
+        {/* Icon */}
+        <div className="w-20 h-20 rounded-3xl bg-sage-600 flex items-center justify-center shadow-xl">
+          <div className="text-warm-50" style={{ transform: 'scale(2.2)' }}>{Icons.logo}</div>
         </div>
 
-        <Card className="p-8">
-          {editingId ? (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-sm font-medium text-warm-900">Google OAuth Client ID</span>
-                <input
-                  value={pendingId}
-                  onChange={(e) => setPendingId(e.target.value)}
-                  placeholder="123456789-abc.apps.googleusercontent.com"
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface font-mono text-xs"
-                />
-              </label>
-              {err && <div className="text-sm text-red-700">{err}</div>}
-              <div className="flex gap-2">
-                <Button onClick={saveClient} className="flex-1">Save Client ID</Button>
-                {clientId && <Button variant="ghost" onClick={() => { setEditingId(false); setErr(''); }}>Cancel</Button>}
-              </div>
-              <button onClick={() => setShowSetup((v) => !v)} className="text-xs text-sage-700 hover:underline">
-                {showSetup ? 'Hide' : 'Show'} setup instructions
-              </button>
-              {showSetup && (
-                <div className="bg-warm-100 rounded-lg p-4 text-xs text-warm-800 space-y-2 leading-relaxed">
-                  <p><strong>One-time setup in Google Cloud:</strong></p>
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li>Open <a className="underline text-sage-700" href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">console.cloud.google.com</a> and create (or pick) a project.</li>
-                    <li>Enable <strong>People API</strong>, <strong>Google Calendar API</strong>, and <strong>Google Drive API</strong> under APIs &amp; Services → Library.</li>
-                    <li>Under APIs &amp; Services → OAuth consent screen, create an "External" app, add your Gmail as a test user, and add scopes: <code className="font-mono">contacts.readonly</code>, <code className="font-mono">calendar.readonly</code>, <code className="font-mono">drive.appdata</code>, <code className="font-mono">profile</code>, <code className="font-mono">email</code>.</li>
-                    <li>Under Credentials → Create Credentials → <strong>OAuth client ID</strong> → Web application. Add this origin to <em>Authorized JavaScript origins</em>:
-                      <div className="mt-1 font-mono bg-surface px-2 py-1 rounded border border-warm-300 break-all">{origin || '(open this page via http/https first)'}</div>
-                    </li>
-                    <li>Copy the Client ID and paste it above.</li>
-                  </ol>
-                  <p className="text-warm-600"><strong>How Tether stores your data:</strong> All contact information is saved to a hidden file (<code className="font-mono">tether_contacts_v1.json</code>) in your Google Drive's private appData folder — invisible to you in Drive UI and not deletable accidentally. Google Contacts are read once to seed the initial list. After that, Tether never writes to Google Contacts.</p>
-                  {origin.startsWith('file://') && (
-                    <p className="text-red-700"><strong>Note:</strong> Google OAuth does not allow <code>file://</code> origins. Serve this folder over HTTP (e.g. <code className="font-mono">python -m http.server</code> or VS Code Live Server) and reopen.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={connectGoogle}
-                disabled={busy}
-                className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl border border-warm-300 bg-surface hover:bg-warm-50 shadow-sm transition disabled:opacity-60"
-              >
-                {Icons.google}
-                <span className="font-medium text-warm-900">{busy ? 'Connecting…' : 'Sign in with Google'}</span>
-              </button>
-              {err && <div className="text-sm text-red-700 mt-3">{err}</div>}
-              <p className="text-xs text-warm-600 text-center mt-4">
-                Requests read access to Contacts, Contacts write, and Calendar read. Calendar write is deferred.
-              </p>
-              <div className="mt-3 flex items-center justify-between text-xs text-warm-600">
-                <span className="font-mono truncate max-w-[60%]" title={clientId}>Client ID: {clientId.slice(0, 12)}…</span>
-                <button onClick={() => { setPendingId(clientId); setEditingId(true); }} className="text-sage-700 hover:underline">Change</button>
-              </div>
-            </>
-          )}
+        {/* Wordmark */}
+        <span className="font-serif text-4xl font-semibold text-warm-900 tracking-tight">Tether</span>
 
-          <div className="mt-6 pt-6 border-t border-warm-200 text-center">
-            <button onClick={useDemo} className="text-xs text-warm-600 hover:text-warm-900 underline">
-              Or explore with mock data (no Google account)
-            </button>
-          </div>
-        </Card>
+        {/* Tagline */}
+        <h1 className="font-serif text-2xl text-warm-800 leading-snug">
+          Stay tethered to those who matter.
+        </h1>
 
-        <p className="text-center text-xs text-warm-500 mt-6">
-          Free · Open source · No project-owned backend · Your data stays yours
+        {/* Subtitle */}
+        <p className="text-warm-600 leading-relaxed text-sm max-w-xs">
+          A private open-source tool to help you keep track of and keep in touch with the important people in your life.
+        </p>
+
+        {/* Sign-in button */}
+        <div className="w-full max-w-xs space-y-3">
+          <button
+            id="signin-google-btn"
+            onClick={connectGoogle}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl border border-warm-300 bg-surface hover:bg-warm-50 shadow-sm transition-all duration-200 disabled:opacity-60"
+          >
+            {Icons.google}
+            <span className="font-medium text-warm-900">{busy ? 'Connecting…' : 'Sign in with Google'}</span>
+          </button>
+          {err && <div className="text-sm text-red-700 text-center rounded-lg bg-red-50 border border-red-200 px-3 py-2">{err}</div>}
+        </div>
+
+        {/* Footer */}
+        <p className="text-xs text-warm-500">
+          Free · Open source · No backend · Your data stays yours
         </p>
       </div>
     </div>
@@ -655,7 +588,7 @@ function SignInScreen() {
 function SyncProgress() {
   const { state, setState } = useApp();
   const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState('Syncing your network…');
+  const [stage, setStage] = useState('Loading your contacts…');
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -668,9 +601,8 @@ function SyncProgress() {
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
           const steps = [
-            [15, 'Loading demo contacts…'],
-            [40, 'Mapping mock labels…'],
-            [70, 'Fetching demo calendar…'],
+            [25, 'Loading demo contacts…'],
+            [60, 'Fetching demo calendar…'],
             [90, 'Computing importance ranking…'],
             [100, 'Done'],
           ];
@@ -680,44 +612,62 @@ function SyncProgress() {
           }
           contacts = state.contacts;
           events = state.events;
+        } else if (state.isImporting) {
+          // Manual import from Google Contacts
+          const resultContacts = await window.TetherGoogle.importContactsFromGoogle(({ label, pct }) => {
+            setProgress(Math.round(pct * 0.7));
+            setStage(label);
+          });
+          contacts = resultContacts;
+          // Refresh events too
+          const syncRes = await window.TetherGoogle.loadFromDrive(() => { });
+          events = syncRes.events;
         } else {
-          // Real sync — single call, captures result
-          const result = await window.TetherGoogle.syncAll(({ label, pct }) => {
-            setProgress(Math.round(pct * 0.65));
+          // Regular load from Drive
+          const result = await window.TetherGoogle.loadFromDrive(({ label, pct }) => {
+            setProgress(Math.round(pct * 0.8));
             setStage(label);
           });
           contacts = result.contacts;
           events = result.events;
         }
 
-        // Geocode contacts that have a city but no coordinates
-        const needsGeocode = contacts.filter(
-          (c) => c.location && c.location.city && c.location.lat == null
-        );
-        if (needsGeocode.length > 0) {
-          setStage(`Geocoding map locations (${needsGeocode.length} contacts)…`);
-          setProgress(66);
-          contacts = await geocodeMissingLocations(contacts, (done, total, updated) => {
-            contacts = updated;
-            setProgress(66 + Math.round((done / total) * 32));
-            setStage(`Geocoding map locations… ${done}/${total}`);
-          });
+        // Geocode any contacts missing coordinates
+        if (contacts.length > 0) {
+          const needsGeocode = contacts.filter(
+            (c) => c.location && c.location.city && c.location.lat == null
+          );
+          if (needsGeocode.length > 0) {
+            setStage(`Geocoding locations (${needsGeocode.length} contacts)…`);
+            setProgress(85);
+            contacts = await geocodeMissingLocations(contacts, (done, total, updated) => {
+              contacts = updated;
+              setProgress(85 + Math.round((done / total) * 14));
+              setStage(`Geocoding locations… ${done}/${total}`);
+            });
+            // Persist geocoded coordinates back to Drive
+            if (window.TetherGoogle && !state.demoMode) {
+              await window.TetherGoogle.saveContacts(contacts).catch(() => { });
+            }
+          }
         }
 
         setProgress(100);
         setStage('Done');
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 400));
 
         setState((s) => ({
           ...s,
           contacts,
           events,
+          isImporting: false,
           lastSyncAt: new Date().toISOString(),
-          phase: 'walkthrough',
+          phase: 'dashboard',
+          activeTab: 'contacts',
         }));
       } catch (e) {
-        console.error('Sync failed:', e);
-        setErr(e && e.message ? e.message : 'Sync failed');
+        console.error('Load failed:', e);
+        setErr(e && e.message ? e.message : 'Failed to load contacts');
       }
     })();
   }, [setState]);
@@ -728,7 +678,7 @@ function SyncProgress() {
         <div className="max-w-lg w-full">
           <Card className="p-10">
             <div className="text-center mb-6">
-              <h2 className="font-serif text-2xl text-warm-900 mb-2">Sync failed</h2>
+              <h2 className="font-serif text-2xl text-warm-900 mb-2">Load failed</h2>
               <p className="text-red-700 text-sm">{err}</p>
             </div>
             <Button variant="outline" onClick={() => window.location.reload()} className="w-full">
@@ -745,10 +695,10 @@ function SyncProgress() {
       <div className="max-w-lg w-full">
         <Card className="p-10 text-center">
           <div className="w-16 h-16 rounded-2xl bg-sage-100 mx-auto flex items-center justify-center mb-6">
-            <div className="scale-[2] text-sage-700">{Icons.logo}</div>
+            <div className="text-sage-700" style={{ transform: 'scale(2)' }}>{Icons.logo}</div>
           </div>
-          <h2 className="font-serif text-2xl text-warm-900 mb-2">Syncing your network</h2>
-          <p className="text-warm-600 text-sm mb-8">One-time sync. After this, use "Sync now" from Settings.</p>
+          <h2 className="font-serif text-2xl text-warm-900 mb-2">Loading your contacts</h2>
+          <p className="text-warm-600 text-sm mb-8">Checking your private Drive storage…</p>
           <div className="w-full bg-warm-100 rounded-full h-2 overflow-hidden mb-3">
             <div className="bg-sage-500 h-full transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
@@ -965,13 +915,12 @@ function OnboardingShell({ step, title, subtitle, children }) {
 // ───────────────────────────────────────────────────────────────────
 
 const WALKTHROUGH_STEPS = [
-  { tabKey: 'reconnect', title: 'Reconnect', body: "Your landing tab. Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
-  { tabKey: 'ask', title: 'Ask', body: "Chat over your network. Ask things like 'Who do I know in Berlin?' or 'Which friends are into climbing?' — configure an LLM in Settings, or use the built-in demo matcher.", position: 'top' },
+  { tabKey: 'contacts', title: 'All Contacts', body: "All your contacts live here. Import from Google Contacts (or other sources) using the Import button. You can also manage labels and filter from this tab.", position: 'top' },
+  { tabKey: 'reconnect', title: 'Reconnect', body: "Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
   { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency.", position: 'top' },
   { tabKey: 'calendar', title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction.", position: 'top' },
-  { tabKey: 'contacts', title: 'All Contacts', body: "Every contact Google knows about. Default sort is our importance ranking — tweak from the header.", position: 'top' },
   { tabKey: 'help', title: 'Help', body: "Help has docs and a button to rerun this walkthrough.", position: 'bottom' },
-  { tabKey: 'settings', title: 'Settings', body: "Settings is where you change theme, LLM config, and sync options.", position: 'bottom' },
+  { tabKey: 'settings', title: 'Settings', body: "Settings is where you configure your theme, LLM, and sync options.", position: 'bottom' },
 ];
 
 function WalkthroughOverlay() {
@@ -1038,11 +987,11 @@ function SkippedWalkthroughToast() {
 // ───────────────────────────────────────────────────────────────────
 
 const NAV = [
+  { key: 'contacts', label: 'All Contacts', icon: Icons.contacts },
   { key: 'reconnect', label: 'Reconnect', icon: Icons.reconnect },
   { key: 'ask', label: 'Ask', icon: Icons.ask },
   { key: 'map', label: 'Map', icon: Icons.map },
   { key: 'calendar', label: 'Calendar', icon: Icons.calendar },
-  { key: 'contacts', label: 'All Contacts', icon: Icons.contacts },
 ];
 const NAV_UTIL = [
   { key: 'help', label: 'Help', icon: Icons.help },
@@ -1051,6 +1000,7 @@ const NAV_UTIL = [
 
 function Sidebar() {
   const { state, setState } = useApp();
+
   const setTab = (key) => setState((s) => ({ ...s, activeTab: key }));
   const unresolvedCount = useUnresolvedCount();
   const staleCount = useStaleCloseCount();
@@ -1073,6 +1023,7 @@ function Sidebar() {
           const badge = item.key === 'calendar' && unresolvedCount > 0 ? unresolvedCount
             : item.key === 'reconnect' && staleCount > 0 ? staleCount : null;
           const isHighlight = isWalkthrough && active;
+
           return (
             <button key={item.key} onClick={() => setTab(item.key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
@@ -1337,6 +1288,7 @@ function ContactDrawer() {
               )}
 
               <div className="mt-1 flex flex-wrap gap-1.5">
+                {cats.map((c) => <CategoryPill key={c.key} category={c} onRemove={() => removeCrmLabelFromContact(contact.id, c.label)} />)}
                 {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
               </div>
             </div>
@@ -1688,93 +1640,112 @@ function ReconnectTab() {
         <p className="text-warm-600 mt-1">Who needs a little warmth today.</p>
       </div>
 
-      <section>
-        <div className="flex items-end justify-between gap-3 mb-3">
-          <div>
-            <h2 className="font-serif text-xl text-warm-900">Catch Up</h2>
-            <p className="text-sm text-warm-600 mt-0.5">
-              {catchUp.length === 0
-                ? 'Add contacts you want to stay in touch with.'
-                : `${catchUp.length} ${catchUp.length === 1 ? 'contact' : 'contacts'} — sorted by urgency`}
+      {state.contacts.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center min-h-[320px] text-center p-10 space-y-6">
+          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
+            <div className="scale-[2]">{Icons.reconnect}</div>
+          </div>
+          <div className="max-w-md">
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">Nobody to reconnect with</h2>
+            <p className="text-warm-700">
+              Add contacts you want to stay in touch with in the <strong>All Contacts</strong> tab first. Once you set a nudge frequency, they'll appear here.
             </p>
           </div>
-          <Button size="sm" onClick={() => setAddOpen(true)}>+ Add contacts</Button>
-        </div>
+        </Card>
+      ) : (
+        <>
+          <section>
+            <div className="flex items-end justify-between gap-3 mb-3">
+              <div>
+                <h2 className="font-serif text-xl text-warm-900">Catch Up</h2>
+                <p className="text-sm text-warm-600 mt-0.5">
+                  {catchUp.length === 0
+                    ? 'Add contacts you want to stay in touch with.'
+                    : `${catchUp.length} ${catchUp.length === 1 ? 'contact' : 'contacts'} — sorted by urgency`}
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setAddOpen(true)}>+ Add contacts</Button>
+            </div>
 
-        {catchUp.length === 0 ? (
-          <Card className="flex flex-col items-center justify-center min-h-[288px] text-center p-8">
-            <p className="text-warm-700 mb-4">Your catch up list is empty. Add contacts — or a whole group of them — and set how often you want to be nudged.</p>
-            <Button onClick={() => setAddOpen(true)}>+ Add contacts</Button>
-          </Card>
-        ) : (
-          <div className="grid gap-2">
-            {catchUp.map((c) => {
-              const overdue = !c._noHistory && c._daysRemaining < 0;
-              const errorState = c._noHistory; // no interactions logged yet
-              const cats = categoriesFor(c, state.customCategories);
-              const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
-              const barColor = errorState ? 'hsl(0, 65%, 48%)' : nudgeDaysColor(c._daysRemaining);
+            {catchUp.length === 0 ? (
+              <Card className="flex flex-col items-center justify-center min-h-[288px] text-center p-8">
+                <p className="text-warm-700 mb-4">Your catch up list is empty. Add contacts — or a whole group of them — and set how often you want to be nudged.</p>
+                <Button onClick={() => setAddOpen(true)}>+ Add contacts</Button>
+              </Card>
+            ) : (
+              <div className="grid gap-2">
+                {catchUp.map((c) => {
+                  const overdue = !c._noHistory && c._daysRemaining < 0;
+                  const errorState = c._noHistory; // no interactions logged yet
+                  const crmLabels = c.crmLabels || [];
+                  const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
+                  const barColor = errorState ? 'hsl(0, 65%, 48%)' : nudgeDaysColor(c._daysRemaining);
 
-              const lastContactedText = errorState
-                ? 'No interactions logged yet'
-                : `Last contacted ${relativeDate(c.lastContactedAt)}`;
+                  const lastContactedText = errorState
+                    ? 'No interactions logged yet'
+                    : `Last contacted ${relativeDate(c.lastContactedAt)}`;
 
-              let statusText;
-              if (errorState) {
-                statusText = `No recent interactions (nudge every ${c.nudgeFrequencyDays} days)`;
-              } else if (overdue) {
-                statusText = `${Math.abs(Math.round(c._daysRemaining))} days overdue (nudge every ${c.nudgeFrequencyDays} days)`;
-              } else {
-                statusText = `${Math.round(c._daysRemaining)} days until nudge (nudge every ${c.nudgeFrequencyDays} days)`;
-              }
+                  let statusText;
+                  if (errorState) {
+                    statusText = `No recent interactions (nudge every ${c.nudgeFrequencyDays} days)`;
+                  } else if (overdue) {
+                    statusText = `${Math.abs(Math.round(c._daysRemaining))} days overdue (nudge every ${c.nudgeFrequencyDays} days)`;
+                  } else {
+                    statusText = `${Math.round(c._daysRemaining)} days until nudge (nudge every ${c.nudgeFrequencyDays} days)`;
+                  }
 
-              const emphasized = overdue || errorState;
+                  const emphasized = overdue || errorState;
 
-              return (
-                <Card
-                  key={c.id}
-                  className="group flex items-stretch overflow-hidden hover:shadow-md transition cursor-pointer"
-                >
-                  <div style={{ width: 5, background: barColor, flexShrink: 0 }} />
-                  <div className="p-4 flex items-center gap-4 flex-1 min-w-0 relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setState((s) => ({
-                          ...s,
-                          contacts: s.contacts.map((x) => x.id === c.id ? { ...x, nudgeFrequencyDays: null } : x),
-                        }));
-                      }}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full bg-warm-200 hover:bg-warm-300 text-warm-600 hover:text-warm-900 text-xs leading-none"
-                      title="Remove from catch up"
-                    >×</button>
-                    <div onClick={() => openDrawer(c.id)} className="flex items-center gap-4 flex-1 min-w-0">
-                      <Avatar contact={c} size={44} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`truncate ${emphasized ? 'font-bold text-warm-900' : 'font-medium text-warm-900'}`}>{c.name}</span>
-                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
-                          {googleLabels.map((l) => <Tag key={l} label={l} />)}
+                  return (
+                    <Card
+                      key={c.id}
+                      className="group flex items-stretch overflow-hidden hover:shadow-md transition cursor-pointer"
+                    >
+                      <div style={{ width: 5, background: barColor, flexShrink: 0 }} />
+                      <div className="p-4 flex items-center gap-4 flex-1 min-w-0 relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setState((s) => ({
+                              ...s,
+                              contacts: s.contacts.map((x) => x.id === c.id ? { ...x, nudgeFrequencyDays: null } : x),
+                            }));
+                          }}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full bg-warm-200 hover:bg-warm-300 text-warm-600 hover:text-warm-900 text-xs leading-none"
+                          title="Remove from catch up"
+                        >×</button>
+                        <div onClick={() => openDrawer(c.id)} className="flex items-center gap-4 flex-1 min-w-0">
+                          <Avatar contact={c} size={44} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`truncate ${emphasized ? 'font-bold text-warm-900' : 'font-medium text-warm-900'}`}>{c.name}</span>
+                              {crmLabels.map((l) => {
+                                const cat = categoryByKey(l, state.customCategories);
+                                return cat ? <CategoryPill key={cat.key} category={cat} /> : null;
+                              })}
+                              {googleLabels.map((l) => <Tag key={l} label={l} />)}
+                            </div>
+                            <div className="text-xs text-warm-600 mt-0.5">
+                              {lastContactedText}
+                              {c.location?.city && ` · ${c.location.city}`}
+                            </div>
+                            <div className={`text-xs font-medium mt-0.5 ${errorState ? 'text-red-700' : overdue ? 'text-amber-700' : 'text-warm-500'}`}>
+                              {statusText}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-warm-600 mt-0.5">
-                          {lastContactedText}
-                          {c.location?.city && ` · ${c.location.city}`}
-                        </div>
-                        <div className={`text-xs font-medium mt-0.5 ${errorState ? 'text-red-700' : overdue ? 'text-amber-700' : 'text-warm-500'}`}>
-                          {statusText}
-                        </div>
+                        <Button size="sm" variant="secondary" onClick={() => openLog(c.id)}>Add an interaction</Button>
                       </div>
-                    </div>
-                    <Button size="sm" variant="secondary" onClick={() => openLog(c.id)}>Add an interaction</Button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-      <AddToCatchUpModal open={addOpen} onClose={() => setAddOpen(false)} />
+          <AddToCatchUpModal open={addOpen} onClose={() => setAddOpen(false)} />
+        </>
+      )}
     </div>
   );
 }
@@ -1935,7 +1906,7 @@ function ImportContactsModal({ open, onClose }) {
   const { setState } = useApp();
 
   const handleGoogleImport = () => {
-    setState((s) => ({ ...s, phase: 'syncing' }));
+    setState((s) => ({ ...s, phase: 'syncing', isImporting: true }));
     onClose();
   };
 
@@ -2121,8 +2092,8 @@ function AllContactsTab() {
                     <td colSpan="4" className="py-20 text-center text-warm-500 italic">No contacts match your search.</td>
                   </tr>
                 ) : rows.map((c) => {
-                  const cats = categoriesFor(c, state.customCategories);
-                  const multi = cats.length > 1;
+                  const crmLabels = c.crmLabels || [];
+                  const multi = crmLabels.length > 1;
                   return (
                     <tr key={c.id} onClick={() => openDrawer(c.id)}
                       className="hover:bg-warm-50 cursor-pointer transition">
@@ -2140,7 +2111,10 @@ function AllContactsTab() {
                       </td>
                       <td className="py-3 px-4 border-r border-warm-200 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
+                          {crmLabels.map((l) => {
+                            const cat = categoryByKey(l, state.customCategories);
+                            return cat ? <CategoryPill key={cat.key} category={cat} /> : null;
+                          })}
                           {c.googleLabels.filter((l) => !l.startsWith('CRM:')).map((l) => <Tag key={l} label={l} />)}
                         </div>
                       </td>
@@ -2188,21 +2162,37 @@ function CalendarTab() {
         )}
       </div>
 
-      {future.length > 0 && (
-        <section>
-          <SectionHeader>Upcoming</SectionHeader>
-          <div className="space-y-2">
-            {future.map((e) => <EventRow key={e.id} event={e} />)}
+      {state.contacts.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center min-h-[320px] text-center p-10 space-y-6">
+          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
+            <div className="scale-[2]">{Icons.calendar}</div>
           </div>
-        </section>
-      )}
+          <div className="max-w-md">
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">Connect your contacts first</h2>
+            <p className="text-warm-700">
+              To match calendar events with people in your life, you'll need to add some contacts first in the <strong>All Contacts</strong> tab.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {future.length > 0 && (
+            <section>
+              <SectionHeader>Upcoming</SectionHeader>
+              <div className="space-y-2">
+                {future.map((e) => <EventRow key={e.id} event={e} />)}
+              </div>
+            </section>
+          )}
 
-      <section>
-        <SectionHeader>Past 3 months</SectionHeader>
-        <div className="space-y-2">
-          {past.map((e) => <EventRow key={e.id} event={e} />)}
-        </div>
-      </section>
+          <section>
+            <SectionHeader>Past 3 months</SectionHeader>
+            <div className="space-y-2">
+              {past.map((e) => <EventRow key={e.id} event={e} />)}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -2426,6 +2416,28 @@ function MapTab() {
   const [locBusy, setLocBusy] = useState(false);
   const [locErr, setLocErr] = useState('');
 
+  if (state.contacts.length === 0) {
+    return (
+      <div className="p-8 max-w-5xl mx-auto space-y-6">
+        <div>
+          <h1 className="font-serif text-3xl text-warm-900">Map</h1>
+          <p className="text-warm-600 mt-1">Every contact with a city or address, pinned globally.</p>
+        </div>
+        <Card className="flex flex-col items-center justify-center min-h-[400px] text-center p-10 space-y-6">
+          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
+            <div className="scale-[2]">{Icons.map}</div>
+          </div>
+          <div className="max-w-md">
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">No contacts to map</h2>
+            <p className="text-warm-700">
+              Once you add contacts with locations in the <strong>All Contacts</strong> tab, they'll appear here automatically.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   const selectedContact = selectedId ? state.contacts.find((c) => c.id === selectedId) : null;
   const hasPin = selectedContact && selectedContact.location && selectedContact.location.lat != null;
 
@@ -2450,8 +2462,28 @@ function MapTab() {
     map.on('click', () => { setDroppedLatLng((prev) => prev); setSelectedId(null); });
     map.on('click', (e) => setDroppedLatLng({ lat: e.latlng.lat, lng: e.latlng.lng }));
     leafletRef.current = map;
-    return () => { map.remove(); leafletRef.current = null; };
-  }, []);
+
+    // Fix for grey tiles / incorrect centering on initial mount or container resize
+    const fixSize = () => {
+      if (leafletRef.current) {
+        leafletRef.current.invalidateSize();
+      }
+    };
+    
+    // Defer invalidateSize slightly to let DOM flexbox layout settle
+    const timer = setTimeout(fixSize, 100);
+
+    // Watch for ongoing size changes (e.g. sidebar collapsing, window resize)
+    const resizeObserver = new ResizeObserver(() => fixSize());
+    resizeObserver.observe(mapRef.current);
+
+    return () => { 
+      clearTimeout(timer);
+      resizeObserver.disconnect();
+      map.remove(); 
+      leafletRef.current = null; 
+    };
+  }, [state.mapFocus]);
 
   // Rebuild pins when contacts / filter / selection change
   useEffect(() => {
@@ -2796,16 +2828,26 @@ function AskTab() {
   const showSetup = llm.provider !== 'demo' && !llm.apiKey && !llm.endpoint;
 
   return (
-    <div className="h-full flex flex-col max-w-3xl mx-auto w-full">
-      <div className="px-8 py-5 border-b border-warm-200">
+    <div className="p-8 max-w-5xl mx-auto space-y-8">
+      <div>
         <h1 className="font-serif text-3xl text-warm-900">Ask</h1>
-        <p className="text-warm-600 text-sm mt-1">
-          Natural language over contact metadata + your notes. Using <strong>{llm.provider === 'demo' ? 'Demo matcher (local)' : llm.provider}</strong>.
-        </p>
+        <p className="text-warm-600 mt-1">AI-powered chatbot to help you answer questions about your contacts.</p>
       </div>
 
-      {showSetup ? (
-        <div className="flex-1 flex items-center justify-center p-8">
+      {state.contacts.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center min-h-[320px] text-center p-10 space-y-6">
+          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
+            <div className="scale-[2]">{Icons.ask}</div>
+          </div>
+          <div className="max-w-md">
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">No data to ask about</h2>
+            <p className="text-warm-700">
+              Tether's AI features work best when you have contacts to query. Add some in the <strong>All Contacts</strong> tab first.
+            </p>
+          </div>
+        </Card>
+      ) : showSetup ? (
+        <div className="flex-1 flex items-center justify-center">
           <Card className="max-w-md w-full p-8 text-center">
             <h2 className="font-serif text-2xl text-warm-900 mb-2">Add an API key to enable chat</h2>
             <p className="text-warm-700 mb-6">Paste your OpenAI/Anthropic key in Settings → LLM config — or switch to the built-in Demo matcher.</p>
@@ -2813,8 +2855,8 @@ function AskTab() {
           </Card>
         </div>
       ) : (
-        <>
-          <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
+        <div className="flex-1 flex flex-col min-h-0 bg-warm-50/50 rounded-2xl border border-warm-200 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] ${m.role === 'user' ? 'bubble-user' : 'bubble-bot'} px-4 py-3 text-sm leading-relaxed`}>
@@ -2845,14 +2887,14 @@ function AskTab() {
             ))}
             <div ref={endRef} />
           </div>
-          <div className="px-8 py-4 border-t border-warm-200 flex items-center gap-2">
+          <div className="p-4 bg-surface border-t border-warm-200 flex items-center gap-2">
             <input value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               placeholder="e.g. who do I know in Lisbon?"
-              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-surface" />
+              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-warm-50 focus:bg-surface transition-colors" />
             <Button onClick={send} icon={Icons.send}>Send</Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -2925,59 +2967,52 @@ function HelpTab() {
 function SettingsTab() {
   const { state, setState, setTheme } = useApp();
   const [showRawData, setShowRawData] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState('');
 
   const updateLLM = (patch) => setState((s) => ({ ...s, llm: { ...s.llm, ...patch } }));
   const updateNudges = (patch) => setState((s) => ({ ...s, nudges: { ...s.nudges, ...patch } }));
 
   const unlink = async () => {
-    setSyncMsg('');
     try {
       if (window.TetherGoogle) await window.TetherGoogle.revoke();
     } catch (e) { console.error('Revoke failed:', e); }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('tether-cal-asked');
-    localStorage.removeItem(CLIENT_ID_KEY);
     window.location.reload();
   };
 
-  const syncNow = async () => {
-    if (syncing) return;
-    setSyncMsg('');
-    setSyncing(true);
+  const deleteAllData = async () => {
+    setDeleting(true);
+    setDeleteMsg('');
     try {
-      if (state.demoMode) {
-        setSyncMsg('Demo mode — no real sync available.');
-        setSyncing(false);
-        return;
+      if (window.TetherGoogle) {
+        // Overwrite Drive file with an empty contacts array
+        await window.TetherGoogle.writeAppData({ contacts: [], version: 1, deletedAt: new Date().toISOString() });
       }
-      setSyncMsg('Syncing contacts & calendar…');
-      const result = await window.TetherGoogle.syncAll(() => { });
-      let { contacts, events } = result;
-      const needsGeocode = contacts.filter(
-        (c) => c.location && c.location.city && c.location.lat == null
-      );
-      if (needsGeocode.length > 0) {
-        setSyncMsg(`Geocoding ${needsGeocode.length} locations…`);
-        contacts = await geocodeMissingLocations(contacts, (done, total) => {
-          setSyncMsg(`Geocoding locations… ${done}/${total}`);
-        });
-      }
+
+      // Reset state but keep auth & preferences
       setState((s) => ({
-        ...s,
-        contacts,
-        events,
-        lastSyncAt: new Date().toISOString(),
+        ...defaultState(),
+        googleSignedIn: s.googleSignedIn,
+        googleProfile: s.googleProfile,
+        demoMode: s.demoMode,
+        theme: s.theme,
+        llm: s.llm,
+        phase: 'dashboard',
+        activeTab: 'contacts',
       }));
-      setSyncMsg('Synced!');
-      setTimeout(() => setSyncMsg(''), 3000);
+
+      localStorage.removeItem(STORAGE_KEY);
+      setDeleteConfirm(false);
+      setDeleteMsg('✓ All contact data wiped from Drive and browser.');
+      setTimeout(() => setDeleteMsg(''), 5000);
     } catch (e) {
-      console.error('Sync error:', e);
-      setSyncMsg(e && e.message ? e.message : 'Sync failed');
+      console.error('Delete failed:', e);
+      setDeleteMsg(`Delete failed: ${e.message || 'unknown error'}`);
     } finally {
-      setSyncing(false);
+      setDeleting(false);
     }
   };
 
@@ -2991,27 +3026,16 @@ function SettingsTab() {
       {/* Account */}
       <Card className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">Account</h3>
-        <div className="flex items-center gap-3">
-          {state.googleProfile && <Avatar contact={{ name: state.googleProfile.name, photoUrl: state.googleProfile.picture }} size={40} />}
-          <div>
-            <div className="font-medium">{state.googleProfile?.name}</div>
-            <div className="text-xs text-warm-600">{state.googleProfile?.email}</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {state.googleProfile && <Avatar contact={{ name: state.googleProfile.name, photoUrl: state.googleProfile.picture }} size={40} />}
+            <div>
+              <div className="font-medium">{state.googleProfile?.name}</div>
+              <div className="text-xs text-warm-600">{state.googleProfile?.email}</div>
+            </div>
           </div>
+          <Button variant="outline" onClick={unlink}>Sign Out</Button>
         </div>
-        <div className="text-sm text-warm-700 space-y-1">
-          <div>Mode: <strong>{state.demoMode ? 'Demo (mock data)' : 'Real Google Contacts + Calendar'}</strong></div>
-          <div>Last sync: <strong>{state.lastSyncAt ? relativeDate(state.lastSyncAt) : 'Initial sync pending'}</strong></div>
-          {!state.demoMode && <div>Scopes: <span className="font-mono text-xs">contacts (r/w), calendar.read</span></div>}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={syncNow} disabled={syncing}>
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </Button>
-          {resetConfirm
-            ? <Button variant="danger" onClick={unlink}>Confirm unlink & clear data</Button>
-            : <Button variant="outline" onClick={() => setResetConfirm(true)}>Unlink account</Button>}
-        </div>
-        {syncMsg && <div className={`text-xs ${syncMsg.includes('fail') || syncMsg.includes('Failed') ? 'text-red-700' : 'text-sage-700'}`}>{syncMsg}</div>}
       </Card>
 
       {/* Appearance */}
@@ -3133,16 +3157,29 @@ function SettingsTab() {
         </label>
       </Card>
 
-      {/* Data */}
-      <Card className="p-6 space-y-3">
-        <h3 className="font-serif text-lg text-warm-900">Data</h3>
-        <p className="text-sm text-warm-700">App-only data (LLM keys, nudges, custom fields, notes) is stored in your browser. Clearing does not touch Google.</p>
-        <Button variant="outline" onClick={() => {
-          if (confirm('Clear all app-only data? Your Google Contacts and Calendar are untouched.')) {
-            localStorage.removeItem(STORAGE_KEY);
-            window.location.reload();
-          }
-        }}>Clear app-only data</Button>
+      {/* Data Management */}
+      <Card className="p-6 space-y-4 border-red-100">
+        <h3 className="font-serif text-lg text-red-900">Danger Zone</h3>
+        <p className="text-sm text-warm-700">
+          Wipe all contact data, interactions, and notes. This affects both your private Google Drive file and your local browser storage.
+        </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            {deleteConfirm ? (
+              <div className="flex gap-2 items-center">
+                <Button variant="danger" onClick={deleteAllData} disabled={deleting}>
+                  {deleting ? 'Wiping...' : 'Yes, delete everything'}
+                </Button>
+                <Button variant="ghost" onClick={() => setDeleteConfirm(false)}>Cancel</Button>
+              </div>
+            ) : (
+              <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDeleteConfirm(true)}>
+                Delete all contact data
+              </Button>
+            )}
+          </div>
+          {deleteMsg && <div className="text-xs text-sage-700 font-medium">{deleteMsg}</div>}
+        </div>
       </Card>
     </div>
   );
