@@ -20,9 +20,9 @@ const saveClientId = (id) => {
   try { localStorage.setItem(CLIENT_ID_KEY, id); } catch (e) { }
 };
 
-// Tether no longer imposes its own category taxonomy — users organize contacts with the labels
-// they already have in Google Contacts (plus any custom categories they create).
-const RESERVED_CATEGORIES = [];
+// Tether no longer imposes its own label taxonomy — users organize contacts with the labels
+// they already have in Google Contacts (plus any custom labels they create).
+const RESERVED_LABELS = [];
 
 const daysSince = (iso) => {
   if (!iso) return Infinity;
@@ -43,27 +43,37 @@ const formatShort = (iso) => new Date(iso).toLocaleDateString(undefined, { month
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-const categoryKeyForLabel = (label) => {
-  const hit = RESERVED_CATEGORIES.find((c) => c.label === label);
+const labelKeyForLabel = (label) => {
+  const hit = RESERVED_LABELS.find((c) => c.label === label);
   return hit ? hit.key : null;
 };
-const categoryByKey = (key, customCategories = []) =>
-  RESERVED_CATEGORIES.find((c) => c.key === key) ||
-  customCategories.find((c) => c.key === key);
+const labelByKey = (key, customLabels = []) =>
+  RESERVED_LABELS.find((c) => c.key === key) ||
+  customLabels.find((c) => c.key === key);
 
-// Contact has CRM labels (array of strings like "CRM: Close Friends").
-// Returns array of matching category objects.
-const categoriesFor = (contact, customCategories = []) => {
-  const all = [...RESERVED_CATEGORIES, ...customCategories];
-  return contact.crmLabels
-    .map((lbl) => all.find((c) => c.label === lbl))
-    .filter(Boolean);
+// Contact has labels in googleLabels and crmLabels.
+// Returns array of matching label objects.
+const labelsFor = (contact, customLabels = []) => {
+  const all = [...RESERVED_LABELS, ...customLabels];
+  const seen = new Set();
+  const res = [];
+  const norm = (l) => l.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+
+  [...contact.crmLabels, ...contact.googleLabels].forEach((lbl) => {
+    const n = norm(lbl);
+    if (seen.has(n)) return;
+    seen.add(n);
+    const match = all.find((c) => norm(c.label) === n);
+    if (match) res.push(match);
+    else res.push({ label: lbl, color: '#a98458', key: `lbl-${lbl}` });
+  });
+  return res;
 };
-const colorFor = (contact, customCategories = []) => {
-  const cats = categoriesFor(contact, customCategories);
-  if (cats.length > 1) return MULTI_COLOR;
-  if (cats.length === 1) return cats[0].color;
-  return '#a98458'; // warm-500 for uncategorized
+const colorFor = (contact, customLabels = []) => {
+  const lbls = labelsFor(contact, customLabels);
+  if (lbls.length > 1) return MULTI_COLOR;
+  if (lbls.length === 1) return lbls[0].color;
+  return '#a98458'; // warm-500 for unlabelled
 };
 
 // Importance ranking (5.3)
@@ -127,7 +137,7 @@ const defaultState = () => ({
   googleProfile: null,
   contacts: [],
   events: [],
-  customCategories: [], // user-added CRM: labels
+  customLabels: [], // user-added CRM: labels
   theme: 'light', // light | dark
   activeTab: 'reconnect',
   llm: { provider: 'demo', apiKey: '', endpoint: '' },
@@ -186,6 +196,17 @@ const Icons = {
       <path d="M16 11v15" stroke="var(--warm-800)" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
+  label: <Icon d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01" />,
+  chevronLeft: <Icon d="M15 18l-6-6 6-6" />,
+  star: <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
+  starFilled: <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" />,
+  pencil: <Icon d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />,
+  trash: <Icon d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+  more: <Icon d="M12 12h.01M19 12h.01M5 12h.01" />,
+  phone: <Icon d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />,
+  chat: <Icon d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />,
+  video: <Icon d="M23 7l-7 5 7 5V7z M14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" />,
+  mail: <Icon d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6" />,
 };
 
 // ───────────────────────────────────────────────────────────────────
@@ -246,34 +267,92 @@ const Card = ({ children, className = '' }) => (
   <div className={`bg-surface rounded-2xl shadow-sm border border-warm-100 ${className}`}>{children}</div>
 );
 
-const CategoryPill = ({ category, onRemove }) => {
-  const isVar = category.color?.startsWith('var(');
-  const style = isVar ? {
-    background: category.bg,
-    color: category.color,
-    border: `1px solid ${category.border}`,
-  } : {
-    background: `${category.color}1a`,
-    color: category.color,
-    border: `1px solid ${category.color}33`,
-  };
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style={style}>
-      <span className="w-2 h-2 rounded-full" style={{ background: category.color }} />
-      {category.label.replace(/^CRM:\s*/, '')}
-      {onRemove && (
-        <button onClick={onRemove} className="ml-1 opacity-60 hover:opacity-100">×</button>
-      )}
-    </span>
-  );
-};
-
+const LabelPill = ({ label }) => (
+  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-warm-100 text-warm-700 border border-warm-200 shadow-sm">
+    {label.label.replace(/^CRM:\s*/i, '')}
+  </span>
+);
 const Tag = ({ label, onRemove }) => (
   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-warm-100 text-warm-700 border border-warm-200">
     {label}
     {onRemove && <button onClick={onRemove} className="opacity-60 hover:opacity-100">×</button>}
   </span>
 );
+
+const LabelMenu = ({ contact, allLabels, onToggle, onCreate, onClose }) => {
+  const [newLabel, setNewLabel] = useState('');
+  const [creating, setCreating] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} className="absolute z-50 top-full right-0 mt-2 w-64 origin-top-right bg-surface rounded-xl shadow-2xl border border-warm-200 overflow-hidden animate-slide-up">
+      <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
+        <span className="text-sm font-medium text-warm-900">Manage labels</span>
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {allLabels.map((cat) => {
+          const has = contact.crmLabels.includes(cat.label) || contact.googleLabels.includes(cat.label);
+          return (
+            <button
+              key={cat.key}
+              onClick={() => onToggle(cat.label)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-warm-100 transition text-left group"
+            >
+              <span className="text-warm-500 group-hover:text-warm-700 scale-90">{Icons.label}</span>
+              <span className="flex-1 text-sm text-warm-800">{cat.label.replace(/^CRM:\s*/i, '')}</span>
+              {has && <span className="text-sage-600 scale-75">{Icons.check}</span>}
+            </button>
+          );
+        })}
+        {allLabels.length === 0 && <div className="px-4 py-8 text-center text-sm text-warm-500 italic">No labels yet</div>}
+      </div>
+      <div className="p-2 border-t border-warm-100">
+        {creating ? (
+          <div className="flex gap-2 p-1">
+            <input
+              autoFocus
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault(); e.stopPropagation();
+                  if (newLabel.trim()) {
+                    onCreate(newLabel.trim());
+                    setCreating(false);
+                    setNewLabel('');
+                  }
+                } else if (e.key === 'Escape') setCreating(false);
+              }}
+              placeholder="Label name"
+              className="flex-1 px-3 py-1.5 text-sm border border-warm-300 rounded-lg bg-warm-50 focus:outline-none focus:border-sage-500 min-w-0"
+            />
+            <button onClick={() => {
+              if (newLabel.trim()) {
+                onCreate(newLabel.trim());
+                setCreating(false);
+                setNewLabel('');
+              }
+            }} className="px-3 py-1.5 text-xs font-medium bg-sage-600 text-white rounded-lg hover:bg-sage-700 transition">Add</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreating(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-warm-700 hover:bg-warm-100 rounded-lg transition"
+          >
+            <span className="scale-75 opacity-70">{Icons.plus}</span>
+            <span>Create label</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const SectionHeader = ({ children, action, sub }) => (
   <div className="flex items-center justify-between mb-3">
@@ -345,29 +424,40 @@ function AppProvider({ children }) {
 
   // ── Contact ops
   const updateContact = useCallback((id, patch) => {
-    setState((s) => ({
-      ...s,
-      contacts: s.contacts.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    }));
-  }, [setState]);
+    setState((s) => {
+      const contacts = s.contacts.map((c) => (c.id === id ? { ...c, ...patch } : c));
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts };
+    });
+  }, [setState, saveContactsToDrive]);
+
+  const deleteContactPermanently = useCallback((id) => {
+    setState((s) => {
+      const contacts = s.contacts.filter((c) => c.id !== id);
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts };
+    });
+  }, [setState, saveContactsToDrive]);
 
   const addCrmLabelToContact = useCallback((id, label) => {
-    setState((s) => ({
-      ...s,
-      contacts: s.contacts.map((c) => c.id === id
+    setState((s) => {
+      const contacts = s.contacts.map((c) => c.id === id
         ? { ...c, crmLabels: c.crmLabels.includes(label) ? c.crmLabels : [...c.crmLabels, label] }
-        : c),
-    }));
-  }, [setState]);
+        : c);
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts };
+    });
+  }, [setState, saveContactsToDrive]);
 
   const removeCrmLabelFromContact = useCallback((id, label) => {
-    setState((s) => ({
-      ...s,
-      contacts: s.contacts.map((c) => c.id === id
+    setState((s) => {
+      const contacts = s.contacts.map((c) => c.id === id
         ? { ...c, crmLabels: c.crmLabels.filter((l) => l !== label) }
-        : c),
-    }));
-  }, [setState]);
+        : c);
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts };
+    });
+  }, [setState, saveContactsToDrive]);
 
   const logInteraction = useCallback((contactId, { date, type, note, location }) => {
     const iso = date || new Date().toISOString();
@@ -400,8 +490,32 @@ function AppProvider({ children }) {
     contactIds.forEach((id) => logInteraction(id, data));
   }, [logInteraction]);
 
-  // ── Category ops
-  const allCategories = useMemo(() => [...RESERVED_CATEGORIES, ...state.customCategories], [state.customCategories]);
+  // ── Label ops
+  const allLabels = useMemo(() => {
+    const custom = state.customLabels || [];
+    const seen = new Set();
+    const norm = (l) => l.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+
+    const res = [];
+    custom.forEach((c) => {
+      const n = norm(c.label);
+      if (!seen.has(n)) {
+        res.push(c);
+        seen.add(n);
+      }
+    });
+
+    state.contacts.forEach((c) => {
+      [...c.googleLabels, ...c.crmLabels].forEach((l) => {
+        const n = norm(l);
+        if (!seen.has(n)) {
+          res.push({ key: `imported-${l}`, label: l, color: '#a98458' });
+          seen.add(n);
+        }
+      });
+    });
+    return res;
+  }, [state.customLabels, state.contacts]);
 
   // ── Event / attendee ops
   const addGuestToEvent = useCallback((eventId, contactId) => {
@@ -464,14 +578,79 @@ function AppProvider({ children }) {
     }));
   }, [setState]);
 
-  const addCustomCategory = useCallback((label, color) => {
+  const addCustomLabel = useCallback((label, color) => {
     const key = label.replace(/^CRM:\s*/, '').toLowerCase().replace(/\s+/g, '-');
     const full = label.startsWith('CRM:') ? label : `CRM: ${label}`;
     setState((s) => ({
       ...s,
-      customCategories: [...s.customCategories, { key, label: full, color }],
+      customLabels: [...(s.customLabels || []), { key, label: full, color }],
     }));
   }, [setState]);
+
+  const renameLabel = useCallback((oldLabel, newLabel) => {
+    setState((s) => {
+      const norm = (l) => l.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+      const oldNorm = norm(oldLabel);
+      const isCrm = newLabel.startsWith('CRM:');
+      const newFull = isCrm ? newLabel : `CRM: ${newLabel}`;
+      const newKey = newFull.replace(/^CRM:\s*/, '').toLowerCase().replace(/\s+/g, '-');
+
+      const contacts = s.contacts.map((c) => {
+        const hasCrm = c.crmLabels.some((l) => norm(l) === oldNorm);
+        const hasGoogle = c.googleLabels.some((l) => norm(l) === oldNorm);
+        if (!hasCrm && !hasGoogle) return c;
+
+        const crmLabels = c.crmLabels.filter((l) => norm(l) !== oldNorm);
+        const googleLabels = c.googleLabels.filter((l) => norm(l) !== oldNorm);
+        crmLabels.push(newFull);
+        return { ...c, crmLabels, googleLabels };
+      });
+
+      let customLabels = (s.customLabels || []).map((c) => {
+        if (norm(c.label) === oldNorm) {
+          return { ...c, key: newKey, label: newFull };
+        }
+        return c;
+      });
+
+      if (!customLabels.some(c => norm(c.label) === norm(newFull))) {
+        customLabels.push({ key: newKey, label: newFull, color: '#a98458' });
+      }
+
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts, customLabels };
+    });
+  }, [setState, saveContactsToDrive]);
+
+  const deleteLabel = useCallback((label, deleteContactsToo) => {
+    setState((s) => {
+      const norm = (l) => l.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+      const targetNorm = norm(label);
+
+      let contacts = s.contacts;
+      if (deleteContactsToo) {
+        contacts = contacts.filter((c) => {
+          const has = c.crmLabels.some((l) => norm(l) === targetNorm) || c.googleLabels.some((l) => norm(l) === targetNorm);
+          return !has;
+        });
+      } else {
+        contacts = contacts.map((c) => {
+          const has = c.crmLabels.some((l) => norm(l) === targetNorm) || c.googleLabels.some((l) => norm(l) === targetNorm);
+          if (!has) return c;
+          return {
+            ...c,
+            crmLabels: c.crmLabels.filter((l) => norm(l) !== targetNorm),
+            googleLabels: c.googleLabels.filter((l) => norm(l) !== targetNorm),
+          };
+        });
+      }
+
+      const customLabels = (s.customLabels || []).filter((c) => norm(c.label) !== targetNorm);
+
+      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      return { ...s, contacts, customLabels };
+    });
+  }, [setState, saveContactsToDrive]);
 
   const setTheme = useCallback((theme) => {
     setState((s) => ({ ...s, theme }));
@@ -484,12 +663,12 @@ function AppProvider({ children }) {
 
   const value = {
     state, setState,
-    updateContact, addCrmLabelToContact, removeCrmLabelFromContact,
+    updateContact, deleteContactPermanently, addCrmLabelToContact, removeCrmLabelFromContact,
     logInteraction, logInteractionMany,
     resolveEventAttendee, dismissAttendee,
     addGuestToEvent, removeGuestFromEvent,
-    addCustomCategory, setTheme,
-    allCategories,
+    addCustomLabel, renameLabel, deleteLabel, setTheme,
+    allLabels,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
@@ -1045,13 +1224,14 @@ const NAV = [
   { key: 'contacts', label: 'All Contacts', icon: Icons.contacts },
 ];
 const NAV_UTIL = [
+  { key: 'trash', label: 'Trash', icon: Icons.trash },
   { key: 'help', label: 'Help', icon: Icons.help },
   { key: 'settings', label: 'Settings', icon: Icons.settings },
 ];
 
 function Sidebar() {
-  const { state, setState } = useApp();
-  const setTab = (key) => setState((s) => ({ ...s, activeTab: key }));
+  const { state, setState, allLabels, updateContact, addCustomLabel } = useApp();
+  const setTab = (key) => setState((s) => ({ ...s, activeTab: key, activeLabelFilter: null }));
   const unresolvedCount = useUnresolvedCount();
   const staleCount = useStaleCloseCount();
 
@@ -1067,23 +1247,25 @@ function Sidebar() {
           <span className="font-serif text-xl font-semibold text-warm-900">Tether</span>
         </div>
       </div>
-      <nav className="flex-1 px-3 space-y-1">
-        {NAV.map((item) => {
-          const active = state.activeTab === item.key;
-          const badge = item.key === 'calendar' && unresolvedCount > 0 ? unresolvedCount
-            : item.key === 'reconnect' && staleCount > 0 ? staleCount : null;
-          const isHighlight = isWalkthrough && active;
-          return (
-            <button key={item.key} onClick={() => setTab(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
-              <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
-              <span className="flex-1 text-left">{item.label}</span>
-              {badge != null && <span className={`text-xs px-2 py-0.5 rounded-full ${active ? 'bg-warm-50/20 text-warm-50' : 'bg-sage-500 text-warm-50'}`}>{badge}</span>}
-            </button>
-          );
-        })}
-      </nav>
-      <div className="px-3 py-3 border-t border-warm-200 space-y-1">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-4">
+        <nav className="px-3 pt-2 space-y-1">
+          {NAV.map((item) => {
+            const active = state.activeTab === item.key && !state.activeLabelFilter;
+            const badge = item.key === 'calendar' && unresolvedCount > 0 ? unresolvedCount
+              : item.key === 'reconnect' && staleCount > 0 ? staleCount : null;
+            const isHighlight = isWalkthrough && active;
+            return (
+              <button key={item.key} onClick={() => setTab(item.key)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
+                <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
+                <span className="flex-1 text-left">{item.label}</span>
+                {badge != null && <span className={`text-xs px-2 py-0.5 rounded-full ${active ? 'bg-warm-50/20 text-warm-50' : 'bg-sage-500 text-warm-50'}`}>{badge}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+      <div className="px-3 py-3 border-t border-warm-200 space-y-1 shrink-0">
         {NAV_UTIL.map((item) => {
           const active = state.activeTab === item.key;
           const isHighlight = isWalkthrough && active;
@@ -1097,18 +1279,10 @@ function Sidebar() {
           );
         })}
       </div>
-      {state.googleProfile && (
-        <div className="p-4 border-t border-warm-200 flex items-center gap-3">
-          <Avatar contact={{ name: state.googleProfile.name, photoUrl: state.googleProfile.picture }} size={32} />
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-warm-900 truncate">{state.googleProfile.name}</div>
-            <div className="text-xs text-warm-600 truncate">{state.googleProfile.email}</div>
-          </div>
-        </div>
-      )}
     </aside>
   );
 }
+
 
 function useUnresolvedCount() {
   const { state } = useApp();
@@ -1273,13 +1447,16 @@ function DrawerProvider({ children }) {
 }
 
 function ContactDrawer() {
-  const { state, updateContact, addCrmLabelToContact, removeCrmLabelFromContact, allCategories } = useApp();
+  const { state, updateContact, deleteContactPermanently, addCrmLabelToContact, removeCrmLabelFromContact, addCustomLabel, allLabels } = useApp();
   const { contactId, close, openLog } = useDrawer();
   const contact = contactId ? state.contacts.find((c) => c.id === contactId) : null;
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
   const [syncErrorMsg, setSyncErrorMsg] = useState('');
+  const [showLabelMenu, setShowLabelMenu] = useState(false);
+
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     if (contact) setDraft({ ...contact });
@@ -1292,7 +1469,7 @@ function ContactDrawer() {
   const save = async () => {
     const patch = {
       name: draft.name, email: draft.email, phone: draft.phone,
-      linkedin: draft.linkedin, instagram: draft.instagram, facebook: draft.facebook, website: draft.website,
+      websites: draft.websites,
       notes: draft.notes, custom: draft.custom,
       nudgeFrequencyDays: draft.nudgeFrequencyDays,
       location: draft.location,
@@ -1317,176 +1494,248 @@ function ContactDrawer() {
     }
   };
 
-  const cats = categoriesFor(contact, state.customCategories);
-  const availableCats = allCategories.filter((c) => !contact.crmLabels.includes(c.label));
+  const labs = labelsFor(contact, state.customLabels);
+  const availableLabels = allLabels.filter((c) => !contact.crmLabels.includes(c.label));
   const nonCrmLabels = contact.googleLabels;
 
   return (
     <>
       <div className="fixed inset-0 z-40 flex justify-end animate-fade-in" onClick={close}>
         <div className="absolute inset-0 bg-warm-900/40 drawer-backdrop" />
-        <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-          <div className="p-6 flex items-start gap-4">
-            <Avatar contact={contact} size={64} ring />
-            <div className="flex-1 min-w-0">
+        <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up flex flex-col" onClick={(e) => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="p-4 flex items-center justify-between border-b border-warm-200 bg-surface sticky top-0 z-10">
+            <button onClick={close} className="p-2 text-warm-600 hover:bg-warm-100 rounded-full transition">{Icons.chevronLeft}</button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => updateContact(contact.id, { isFavorite: !contact.isFavorite })}
+                className={`p-2 rounded-full transition ${contact.isFavorite ? 'text-amber-500' : 'text-warm-600 hover:bg-warm-100'}`}
+                title={contact.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {contact.isFavorite ? Icons.starFilled : Icons.star}
+              </button>
+              {contact.isDeleted ? (
+                <>
+                  <button onClick={() => updateContact(contact.id, { isDeleted: false, deletedAt: null })} className="px-3 py-1.5 text-sm font-medium bg-sage-100 text-sage-700 hover:bg-sage-200 rounded-lg transition" title="Recover contact">Recover</button>
+                  <button onClick={() => setConfirmAction('deletePermanently')} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Delete permanently">{Icons.trash}</button>
+                </>
+              ) : (
+                <>
+                  <button className="p-2 text-warm-600 hover:bg-warm-100 rounded-full transition" onClick={() => setEdit(true)}>{Icons.pencil}</button>
+                  <button onClick={() => setConfirmAction('trash')} className="p-2 text-warm-600 hover:bg-red-50 hover:text-red-600 rounded-full transition" title="Delete contact">{Icons.trash}</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Profile Section */}
+          <div className="flex flex-col items-center pt-8 pb-6 px-6 relative bg-surface border-b border-warm-200">
+            <Avatar contact={contact} size={160} ring />
+
+            <div className="mt-4 w-full text-center">
               {edit ? (
                 <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  className="font-serif text-2xl w-full bg-transparent border-b border-warm-300 focus:border-sage-500 py-1" />
+                  className="font-serif text-4xl text-center w-full bg-transparent border-b border-warm-300 focus:border-sage-500 py-1" autoFocus />
               ) : (
-                <h2 className="font-serif text-2xl text-warm-900">{contact.name}</h2>
+                <h2 className="font-serif text-4xl text-warm-900">{contact.name}</h2>
               )}
-
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {nonCrmLabels.map((l) => <Tag key={l} label={l} />)}
-              </div>
             </div>
-            <div className="flex flex-col items-end gap-3">
-              <button onClick={close} className="text-warm-600 hover:text-warm-900 p-1">{Icons.x}</button>
-              <div className="flex gap-2">
-                {edit ? (
-                  <>
-                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
-                    <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Syncing...' : 'Save'}</Button>
-                  </>
-                ) : (
-                  <Button size="sm" variant="secondary" icon={Icons.edit} onClick={() => setEdit(true)}>Edit</Button>
+
+            <div className="mt-4 flex items-center justify-center gap-1.5 flex-wrap">
+              {labs.map((l) => (
+                <LabelPill key={l.key} label={l} />
+              ))}
+              <div className="relative ml-0.5">
+                <button
+                  onClick={() => setShowLabelMenu(!showLabelMenu)}
+                  className={labs.length === 0
+                    ? "px-2.5 py-1 rounded-full border border-warm-300 hover:bg-warm-100 text-warm-600 flex items-center gap-1.5 transition text-xs font-medium bg-surface shadow-sm"
+                    : "w-6 h-6 rounded-full border border-warm-300 hover:bg-warm-100 text-warm-600 flex items-center justify-center transition"
+                  }
+                  title="Manage labels"
+                >
+                  <span className="scale-75">{labs.length === 0 ? Icons.plus : Icons.pencil}</span>
+                  {labs.length === 0 && <span>Add labels</span>}
+                </button>
+                {showLabelMenu && (
+                  <LabelMenu
+                    contact={contact}
+                    allLabels={allLabels}
+                    onToggle={(lbl) => {
+                      const norm = (l) => l.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+                      const n = norm(lbl);
+                      const hasCrm = contact.crmLabels.some(l => norm(l) === n);
+                      const hasGoogle = contact.googleLabels.some(l => norm(l) === n);
+
+                      if (hasCrm || hasGoogle) {
+                        const crm = contact.crmLabels.filter(l => norm(l) !== n);
+                        const google = contact.googleLabels.filter(l => norm(l) !== n);
+                        updateContact(contact.id, { crmLabels: crm, googleLabels: google });
+                      } else {
+                        updateContact(contact.id, { crmLabels: [...contact.crmLabels, lbl] });
+                      }
+                    }}
+                    onCreate={(name) => {
+                      addCustomLabel(name, '#a98458');
+                      addCrmLabelToContact(contact.id, `CRM: ${name}`);
+                    }}
+                    onClose={() => setShowLabelMenu(false)}
+                  />
                 )}
               </div>
             </div>
+
           </div>
 
-          {/* Add category */}
-          <div className="px-6 pb-2 flex items-center gap-2">
-            {availableCats.length > 0 && (
-              <select onChange={(e) => { if (e.target.value) addCrmLabelToContact(contact.id, e.target.value); e.target.value = ''; }}
-                className="px-3 py-1.5 rounded-lg border border-warm-300 bg-surface text-sm" defaultValue="">
-                <option value="">+ Add category</option>
-                {availableCats.map((c) => <option key={c.key} value={c.label}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
-              </select>
-            )}
-          </div>
 
-          <div className="p-6 space-y-6">
-            {/* Contact info */}
-            <section>
-              <SectionHeader>Contact</SectionHeader>
-              <div className="space-y-2 text-sm">
+          <div className="p-6 space-y-6 flex-1 bg-warm-50">
+            {/* Contact details */}
+            <Card className="p-5">
+              <SectionHeader>Contact details</SectionHeader>
+              <div className="space-y-4 text-sm mt-4">
                 {['email', 'phone'].map((f) => (
                   <div key={f} className="flex items-center gap-3">
-                    <span className="w-20 text-warm-600 capitalize">{f}</span>
-                    {edit ? (
-                      <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" />
-                    ) : <span className="text-warm-900">{contact[f] || '—'}</span>}
+                    <div className="w-8 flex justify-center text-warm-400">{f === 'email' ? Icons.mail : Icons.phone}</div>
+                    <div className="flex-1">
+                      {edit ? (
+                        <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
+                          className="w-full px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" placeholder={`Add ${f}`} />
+                      ) : (
+                        <div className="text-warm-900">{contact[f] || `Add ${f}`}</div>
+                      )}
+                      <div className="text-[10px] text-warm-500 uppercase tracking-wider mt-0.5">{f === 'email' ? 'Home' : 'Mobile'}</div>
+                    </div>
                   </div>
                 ))}
+
                 <div className="flex items-start gap-3">
-                  <span className="w-20 text-warm-600 pt-1.5">Location</span>
-                  {edit ? (
-                    <LocationAutocomplete
-                      value={draft.location}
-                      onChange={(loc) => setDraft({ ...draft, location: loc })}
-                    />
-                  ) : (
-                    <span className="text-warm-900 pt-1">
-                      {contact.location?.city ? [contact.location.city, contact.location.country].filter(Boolean).join(', ') : '—'}
-                    </span>
-                  )}
+                  <div className="w-8 flex justify-center text-warm-400 mt-1.5">{Icons.pin}</div>
+                  <div className="flex-1">
+                    {edit ? (
+                      <LocationAutocomplete
+                        value={draft.location}
+                        onChange={(loc) => setDraft({ ...draft, location: loc })}
+                      />
+                    ) : (
+                      <div className="text-warm-900 pt-1">
+                        {contact.location?.city ? [contact.location.city, contact.location.country].filter(Boolean).join(', ') : 'Add location'}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-warm-500 uppercase tracking-wider mt-0.5">Address</div>
+                  </div>
                 </div>
               </div>
-            </section>
+            </Card>
 
-            {/* Social */}
-            <section>
+            <Card className="p-5">
               <SectionHeader>Links</SectionHeader>
-              <div className="space-y-2 text-sm">
-                {['linkedin', 'instagram', 'facebook', 'website'].map((f) => (
-                  <div key={f} className="flex items-center gap-3">
-                    <span className="w-20 text-warm-600 capitalize">{f}</span>
-                    {edit ? (
-                      <input value={draft[f] || ''} onChange={(e) => setDraft({ ...draft, [f]: e.target.value })}
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" placeholder="Paste URL or handle" />
-                    ) : contact[f] ? <span className="text-warm-900 truncate">{contact[f]}</span> : <span className="text-warm-500">—</span>}
+              <div className="space-y-4 text-sm mt-4">
+                {(edit ? draft.websites || [] : contact.websites || []).map((site, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-8 flex justify-center text-warm-400">{Icons.externalLink}</div>
+                    <div className="flex-1">
+                      {edit ? (
+                        <div className="flex gap-2">
+                          <input value={site.url} onChange={(e) => { const newSites = [...(draft.websites || [])]; newSites[i].url = e.target.value; setDraft({ ...draft, websites: newSites }); }} className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface min-w-0" placeholder="Website URL" />
+                          <input value={site.label} onChange={(e) => { const newSites = [...(draft.websites || [])]; newSites[i].label = e.target.value; setDraft({ ...draft, websites: newSites }); }} className="w-24 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" placeholder="Label" />
+                          <button onClick={() => { const newSites = (draft.websites || []).filter((_, idx) => idx !== i); setDraft({ ...draft, websites: newSites }); }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition scale-90" title="Remove Link">{Icons.trash}</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-warm-900 truncate"><a href={site.url.startsWith('http') ? site.url : `https://${site.url}`} target="_blank" rel="noreferrer" className="hover:underline">{site.url}</a></div>
+                          <div className="text-[10px] text-warm-500 uppercase tracking-wider mt-0.5">{site.label || 'Website'}</div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {edit && (
+                  <button onClick={() => setDraft({ ...draft, websites: [...(draft.websites || []), { url: '', label: '' }] })} className="text-sm text-sage-600 hover:text-sage-700 flex items-center gap-1 mt-2">
+                    <span className="scale-75">{Icons.plus}</span> Add Website
+                  </button>
+                )}
+                {!edit && !(contact.websites?.length) && <div className="text-sm text-warm-500">No websites added.</div>}
               </div>
-              <p className="text-xs text-warm-500 mt-2 italic">Tether stores links but does not scrape these services.</p>
-            </section>
+              <p className="text-xs text-warm-500 mt-4 italic">Tether stores links but does not scrape these services.</p>
+            </Card>
 
-            {/* Custom */}
-            <section>
-              <SectionHeader>Custom fields</SectionHeader>
-              <div className="space-y-2 text-sm">
+            <Card className="p-5">
+              <SectionHeader>Details & Notes</SectionHeader>
+              <div className="space-y-4 text-sm mt-4">
                 {['company', 'title', 'howWeMet'].map((f) => (
                   <div key={f} className="flex items-center gap-3">
-                    <span className="w-24 text-warm-600">{f === 'howWeMet' ? 'How we met' : f.charAt(0).toUpperCase() + f.slice(1)}</span>
+                    <div className="w-24 text-warm-600">{f === 'howWeMet' ? 'How we met' : f.charAt(0).toUpperCase() + f.slice(1)}</div>
                     {edit ? (
                       <input value={draft.custom?.[f] || ''} onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f]: e.target.value } })}
                         className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-surface" />
-                    ) : <span className="text-warm-900">{contact.custom?.[f] || '—'}</span>}
+                    ) : <div className="flex-1 text-warm-900">{contact.custom?.[f] || '—'}</div>}
                   </div>
                 ))}
+
                 <div className="flex items-start gap-3">
-                  <span className="w-24 text-warm-600">Skills</span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="w-24 text-warm-600">Skills</div>
+                  <div className="flex-1 flex flex-wrap gap-1.5">
                     {(contact.skills || []).map((s) => <Tag key={s} label={s} />)}
                     {(!contact.skills || contact.skills.length === 0) && <span className="text-warm-500">—</span>}
                   </div>
                 </div>
-              </div>
-            </section>
 
-            {/* Notes */}
-            <section>
-              <SectionHeader>Notes</SectionHeader>
-              {edit ? (
-                <textarea value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                  rows={5} className="w-full p-3 rounded-lg border border-warm-300 bg-surface text-sm" />
-              ) : (
-                <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
-              )}
-            </section>
-
-            {/* Nudge */}
-            <section>
-              <SectionHeader>Nudge frequency</SectionHeader>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="text-warm-600">Remind me every</span>
-                {edit ? (
-                  <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
-                    onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
-                    className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-surface" />
-                ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
-                <span className="text-warm-600">days</span>
-              </div>
-            </section>
-
-            {/* History */}
-            <section>
-              <SectionHeader>Interaction history</SectionHeader>
-              {contact.interactions.length === 0 ? (
-                <div className="text-sm text-warm-500 italic">No interactions have been recorded.</div>
-              ) : (
-                <div className="space-y-2">
-                  {contact.interactions.map((i) => (
-                    <div key={i.id} className="flex items-start gap-3 p-3 bg-surface rounded-lg border border-warm-200">
-                      <div className="w-2 h-2 rounded-full bg-sage-500 mt-2" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="font-medium text-warm-900 capitalize">{i.type}</span>
-                          <span className="text-warm-500">· {formatDate(i.date)} ({relativeDate(i.date)})</span>
-                        </div>
-                        {i.note && <div className="text-xs text-warm-700 mt-0.5">{i.note}</div>}
-                      </div>
-                    </div>
-                  ))}
+                <div className="pt-4 border-t border-warm-100">
+                  <div className="text-warm-600 mb-2">Notes</div>
+                  {edit ? (
+                    <textarea value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                      rows={4} className="w-full p-3 rounded-lg border border-warm-300 bg-surface text-sm" />
+                  ) : (
+                    <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
+                  )}
                 </div>
-              )}
-              <div className="mt-4">
-                <Button size="sm" variant="secondary" icon={Icons.plus} onClick={() => openLog(contact.id)}>Add an Interaction</Button>
+
+                <div className="pt-4 border-t border-warm-100 flex items-center gap-3 text-sm">
+                  <span className="text-warm-600">Remind me every</span>
+                  {edit ? (
+                    <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
+                      onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
+                      className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-surface" />
+                  ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
+                  <span className="text-warm-600">days</span>
+                </div>
               </div>
-            </section>
+            </Card>
+
+            <Card className="p-5">
+              <SectionHeader action={<Button size="sm" variant="ghost" icon={Icons.plus} onClick={() => openLog(contact.id)}>Add</Button>}>
+                Recent interactions
+              </SectionHeader>
+              <div className="mt-4 space-y-4">
+                {contact.interactions.length === 0 ? (
+                  <p className="text-sm text-warm-500 italic">No interactions logged yet.</p>
+                ) : (
+                  <div className="relative pl-3 border-l-2 border-warm-200 space-y-6">
+                    {contact.interactions.map((ix) => (
+                      <div key={ix.id} className="relative">
+                        <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-sage-400 border-[3px] border-surface" />
+                        <div className="text-xs text-warm-500 mb-1 flex justify-between">
+                          <span>{formatDate(ix.date)}</span>
+                          <span className="capitalize">{ix.type}</span>
+                        </div>
+                        {ix.note && <div className="text-sm text-warm-800 bg-warm-50 p-3 rounded-lg border border-warm-100">{ix.note}</div>}
+                        {ix.location && <div className="text-xs text-warm-600 mt-1 flex items-center gap-1"><span className="scale-75 opacity-70">{Icons.pin}</span>{ix.location}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
+
+          {/* Edit mode footer actions */}
+          {edit && (
+            <div className="sticky bottom-0 p-4 bg-surface border-t border-warm-200 flex justify-end gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft({ ...contact }); setEdit(false); }}>Cancel</Button>
+              <Button size="sm" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1503,6 +1752,30 @@ function ContactDrawer() {
           </p>
           <div className="flex justify-end">
             <Button size="sm" onClick={() => setSyncErrorMsg('')}>OK</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction === 'trash' ? 'Move to trash?' : 'Permanently delete?'} size="sm">
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-warm-700">
+            {confirmAction === 'trash'
+              ? 'This contact will be moved to the trash and deleted permanently after 30 days.'
+              : 'This contact will be permanently deleted. This action cannot be undone.'}
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirmAction(null)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              if (confirmAction === 'trash') {
+                updateContact(contact.id, { isDeleted: true, deletedAt: Date.now() });
+              } else {
+                deleteContactPermanently(contact.id);
+              }
+              setConfirmAction(null);
+              close();
+            }} className="bg-red-600 hover:bg-red-700 text-white border-transparent">
+              {confirmAction === 'trash' ? 'Move to trash' : 'Delete'}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -1711,7 +1984,7 @@ function ReconnectTab() {
             {catchUp.map((c) => {
               const overdue = !c._noHistory && c._daysRemaining < 0;
               const errorState = c._noHistory; // no interactions logged yet
-              const cats = categoriesFor(c, state.customCategories);
+              const labs = labelsFor(c, state.customLabels);
               const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
               const barColor = errorState ? 'hsl(0, 65%, 48%)' : nudgeDaysColor(c._daysRemaining);
 
@@ -1753,7 +2026,7 @@ function ReconnectTab() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`truncate ${emphasized ? 'font-bold text-warm-900' : 'font-medium text-warm-900'}`}>{c.name}</span>
-                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
+                          {labs.map((x) => <LabelPill key={x.key} label={x} />)}
                           {googleLabels.map((l) => <Tag key={l} label={l} />)}
                         </div>
                         <div className="text-xs text-warm-600 mt-0.5">
@@ -1783,7 +2056,7 @@ function ReconnectTab() {
 // ADD-TO-CATCH-UP MODAL
 // ───────────────────────────────────────────────────────────────────
 // Lets users bulk-add contacts to the Catch Up list by setting a shared nudge frequency.
-// Supports searching by name and filtering by label (Google label or custom category),
+// Supports searching by name and filtering by label (Google label or custom label),
 // so you can e.g. add every "Improv Members" contact at once with a 20-day nudge.
 
 function AddToCatchUpModal({ open, onClose }) {
@@ -1814,7 +2087,7 @@ function AddToCatchUpModal({ open, onClose }) {
     c.googleLabels.filter((l) => !l.startsWith('CRM:')).forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
     c.crmLabels.forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
   });
-  const allLabels = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
+  const allLabelsList = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
 
   const visible = eligible.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -1868,14 +2141,14 @@ function AddToCatchUpModal({ open, onClose }) {
           </label>
         </div>
 
-        {allLabels.length > 0 && (
+        {allLabelsList.length > 0 && (
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
             <button onClick={() => setFilterLabel(null)}
               className={`text-xs px-2 py-1 rounded-full transition ${filterLabel == null ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
               All
             </button>
-            {allLabels.map((l) => (
+            {allLabelsList.map((l) => (
               <button key={l} onClick={() => setFilterLabel(filterLabel === l ? null : l)}
                 className={`text-xs px-2 py-1 rounded-full transition ${filterLabel === l ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
                 {l.replace(/^CRM:\s*/, '')} <span className="opacity-60">· {labelCounts[l]}</span>
@@ -1928,71 +2201,128 @@ function AddToCatchUpModal({ open, onClose }) {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// IMPORT CONTACTS MODAL
+// ALL CONTACTS TAB
 // ───────────────────────────────────────────────────────────────────
 
-function ImportContactsModal({ open, onClose }) {
-  const { setState } = useApp();
+function EditLabelsModal({ open, onClose }) {
+  const { allLabels, renameLabel, deleteLabel, addCustomLabel } = useApp();
+  const [deleting, setDeleting] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addName, setAddName] = useState('');
 
-  const handleGoogleImport = () => {
-    setState((s) => ({ ...s, phase: 'syncing' }));
-    onClose();
-  };
-
-  const options = [
-    { id: 'google', label: 'Google Contacts', icon: Icons.google, enabled: true, onClick: handleGoogleImport },
-    { id: 'csv', label: 'CSV File', icon: Icons.externalLink, enabled: false },
-    { id: 'vcard', label: 'vCard File', icon: Icons.externalLink, enabled: false },
-    { id: 'icloud', label: 'iCloud Account', icon: Icons.externalLink, enabled: false },
-    { id: 'sim', label: 'Phone SIM', icon: Icons.externalLink, enabled: false },
-  ];
+  if (!open) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Import Contacts" size="md">
-      <div className="p-6 space-y-4">
-        <p className="text-sm text-warm-700">Choose where you'd like to import your contacts from:</p>
-        <div className="grid gap-3">
-          {options.map((opt) => (
+    <Modal open={open} onClose={onClose} title="Manage Labels" size="md">
+      <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="mb-2">
+          {adding ? (
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault(); e.stopPropagation();
+                    if (addName.trim()) {
+                      addCustomLabel(addName.trim(), '#a98458');
+                      setAddName('');
+                      setAdding(false);
+                    }
+                  } else if (e.key === 'Escape') setAdding(false);
+                }}
+                className="flex-1 px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm focus:outline-none focus:border-sage-500"
+                placeholder="New label name"
+              />
+              <Button size="sm" onClick={() => {
+                if (addName.trim()) {
+                  addCustomLabel(addName.trim(), '#a98458');
+                  setAddName('');
+                  setAdding(false);
+                }
+              }}>Add</Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+            </div>
+          ) : (
             <button
-              key={opt.id}
-              disabled={!opt.enabled}
-              onClick={opt.onClick}
-              className={`flex items-center gap-4 p-4 rounded-xl border transition text-left ${opt.enabled
-                ? 'border-warm-200 bg-surface hover:bg-warm-50 hover:border-sage-300'
-                : 'border-warm-100 bg-warm-50/50 opacity-60 cursor-not-allowed'
-                }`}
+              onClick={() => setAdding(true)}
+              className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-warm-300 rounded-xl text-warm-600 hover:text-warm-900 hover:border-warm-400 hover:bg-warm-50 transition text-sm font-medium"
             >
-              <div className="w-10 h-10 rounded-full bg-warm-100 flex items-center justify-center text-warm-600">
-                {opt.icon}
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-warm-900">{opt.label}</div>
-                {!opt.enabled && <div className="text-xs text-warm-500">Coming soon</div>}
-              </div>
-              {opt.enabled && <div className="text-sage-600">{Icons.plus}</div>}
+              <span className="scale-75">{Icons.plus}</span> Create new label
             </button>
-          ))}
+          )}
         </div>
-        <div className="flex justify-end pt-4">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        </div>
+        {allLabels.map((l) => (
+          <div key={l.key} className="flex flex-col gap-2 p-3 border border-warm-200 rounded-xl bg-surface">
+            <div className="flex items-center justify-between gap-3">
+              {editing === l.key ? (
+                <div className="flex-1 flex gap-2">
+                  <input
+                    autoFocus
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault(); e.stopPropagation();
+                        if (editName.trim()) renameLabel(l.label, editName.trim());
+                        setEditing(null);
+                      } else if (e.key === 'Escape') setEditing(null);
+                    }}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-warm-300 bg-warm-50 text-sm focus:outline-none focus:border-sage-500"
+                  />
+                  <Button size="sm" onClick={() => { if (editName.trim()) renameLabel(l.label, editName.trim()); setEditing(null); }}>Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="font-medium text-warm-900 truncate flex-1">{l.label.replace(/^CRM:\s*/, '')}</div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => { setEditing(l.key); setEditName(l.label.replace(/^CRM:\s*/, '')); setDeleting(null); }} className="p-2 text-warm-600 hover:bg-warm-100 rounded-full transition" title="Edit name">{Icons.pencil}</button>
+                    <button onClick={() => { setDeleting(l.key); setEditing(null); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Delete label">{Icons.trash}</button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {deleting === l.key && (
+              <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-sm mt-2">
+                <p className="text-red-900 mb-3">Delete this label?</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => { deleteLabel(l.label, false); setDeleting(null); }} className="text-left px-3 py-2 bg-white rounded border border-red-200 hover:bg-red-100 text-red-700 transition">
+                    <strong>Keep all contacts</strong> and delete this label
+                  </button>
+                  <button onClick={() => { deleteLabel(l.label, true); setDeleting(null); }} className="text-left px-3 py-2 bg-white rounded border border-red-200 hover:bg-red-100 text-red-700 transition">
+                    <strong>Delete all contacts</strong> and delete this label
+                  </button>
+                  <button onClick={() => setDeleting(null)} className="text-left px-3 py-2 bg-transparent text-warm-600 hover:bg-warm-100 transition mt-1 rounded">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {allLabels.length === 0 && (
+          <p className="text-sm text-warm-500 text-center italic">No labels yet.</p>
+        )}
       </div>
     </Modal>
   );
 }
 
-// ───────────────────────────────────────────────────────────────────
-// ALL CONTACTS TAB
-// ───────────────────────────────────────────────────────────────────
-
 function AllContactsTab() {
-  const { state, allCategories } = useApp();
+  const { state, allLabels } = useApp();
   const { open: openDrawer } = useDrawer();
-  const [sort, setSort] = useState('importance');
+  const [sort, setSort] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [filter, setFilter] = useState('');
   const [query, setQuery] = useState('');
-  const [importOpen, setImportOpen] = useState(false);
+  const [editLabelsOpen, setEditLabelsOpen] = useState(false);
+
+  const isTrashMode = state.activeTab === 'trash';
 
   const handleSort = (key) => {
     if (sort === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
@@ -2005,7 +2335,9 @@ function AllContactsTab() {
   };
 
   const rows = useMemo(() => {
-    let r = [...state.contacts];
+    let r = isTrashMode
+      ? state.contacts.filter(c => c.isDeleted)
+      : state.contacts.filter(c => !c.isDeleted);
     if (query) {
       const q = query.toLowerCase();
       r = r.filter((c) => c.name.toLowerCase().includes(q) ||
@@ -2018,7 +2350,7 @@ function AllContactsTab() {
     }
     if (filter) {
       r = r.filter((c) => {
-        const match = allCategories.find((cat) => cat.key === filter);
+        const match = allLabels.find((lab) => lab.key === filter);
         return match && c.crmLabels.includes(match.label);
       });
     }
@@ -2042,122 +2374,149 @@ function AllContactsTab() {
       if (valA === valB) return a.name.localeCompare(b.name) * dir;
       return (valA - valB) * dir;
     });
-    if (sort === 'category') r.sort((a, b) => {
-      const getCat = (c) => {
-        const labels = c.googleLabels || [];
-        // Ignore generic system labels if others exist
-        const filtered = labels.filter(l => !['My Contacts', 'Starred', 'Chatted'].includes(l));
-        const first = filtered[0] || labels[0] || '';
-        return first.replace(/^CRM:\s*/i, '').trim().toLowerCase();
+    if (sort === 'label') r.sort((a, b) => {
+      const getLab = (c) => {
+        const labs = labelsFor(c, state.customLabels);
+        return labs.length > 0 ? labs[0].label.replace(/^CRM:\s*/i, '').toLowerCase() : '';
       };
-      const catA = getCat(a);
-      const catB = getCat(b);
+      const labA = getLab(a);
+      const labB = getLab(b);
 
-      if (catA === catB) return a.name.localeCompare(b.name) * dir;
-      if (catA === '') return 1;  // Empty always at bottom
-      if (catB === '') return -1;
+      if (labA === labB) return a.name.localeCompare(b.name) * dir;
+      if (labA === '') return 1;  // Empty always at bottom
+      if (labB === '') return -1;
 
-      return catA.localeCompare(catB) * dir;
+      return labA.localeCompare(labB) * dir;
     });
     return r;
-  }, [state.contacts, sort, sortDir, filter, query, allCategories]);
+  }, [state.contacts, sort, sortDir, filter, query, allLabels]);
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl text-warm-900">All Contacts</h1>
-          <p className="text-warm-600 mt-1">
-            {state.contacts.length === 0
-              ? 'Your address book is empty.'
-              : `${state.contacts.length} contacts — sorted by ${sort === 'importance' ? 'inferred importance' : sort}.`}
-          </p>
-        </div>
-        {state.contacts.length > 0 && <Button size="sm" onClick={() => setImportOpen(true)} icon={Icons.plus}>Import</Button>}
+      <div>
+        <h1 className="font-serif text-3xl text-warm-900">{isTrashMode ? 'Trash' : 'All Contacts'}</h1>
+        <p className="text-warm-600 mt-1">{rows.length} contacts {isTrashMode ? 'in trash' : 'from Google'} — sorted by {sort === 'importance' ? 'inferred importance' : sort}. {isTrashMode && 'Items will be deleted permanently after 30 days.'}</p>
+      </div>
+      <div className="relative w-full">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
+          className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
       </div>
 
-      {state.contacts.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center min-h-[320px] text-center p-10 space-y-6">
-          <div className="w-20 h-20 rounded-full bg-warm-100 flex items-center justify-center text-warm-400">
-            <div className="scale-[2]">{Icons.contacts}</div>
-          </div>
-          <div className="max-w-md">
-            <h2 className="font-serif text-2xl text-warm-900 mb-2">No contacts yet</h2>
-            <p className="text-warm-700">
-              Import your contacts to start staying tethered to the people who matter. You can sync from Google or upload files.
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setImportOpen(true)} icon={Icons.plus}>Import contacts</Button>
-        </Card>
-      ) : (
-        <>
-          <div className="relative w-full">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, city, skill, note…"
-              className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full" />
-          </div>
-
-          <Card className="overflow-hidden">
-            <table className="w-full border-collapse">
-              <thead className="bg-warm-100 text-xs text-warm-700 uppercase">
-                <tr>
-                  <th className="text-left py-3 px-4 border-r border-warm-200 cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('name')}>
-                    Name{sortArrow('name')}
-                  </th>
-                  <th className="text-left py-3 px-4 border-r border-warm-200 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('category')}>
-                    Category{sortArrow('category')}
-                  </th>
-                  <th className="text-left py-3 px-4 border-r border-warm-200 hidden lg:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('location')}>
-                    Location{sortArrow('location')}
-                  </th>
-                  <th className="text-left py-3 px-4 hidden md:table-cell cursor-pointer hover:bg-warm-200 select-none" onClick={() => handleSort('lastContacted')}>
-                    Last contacted{sortArrow('lastContacted')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-warm-100">
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="py-20 text-center text-warm-500 italic">No contacts match your search.</td>
-                  </tr>
-                ) : rows.map((c) => {
-                  const cats = categoriesFor(c, state.customCategories);
-                  const multi = cats.length > 1;
-                  return (
-                    <tr key={c.id} onClick={() => openDrawer(c.id)}
-                      className="hover:bg-warm-50 cursor-pointer transition">
-                      <td className="py-3 px-4 border-r border-warm-200">
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <Avatar contact={c} size={36} />
-                            {multi && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full" style={{ background: MULTI_COLOR, border: '2px solid white' }} />}
-                          </div>
-                          <div>
-                            <div className="font-medium text-warm-900">{c.name}</div>
-                            <div className="text-xs text-warm-600">{c.email || c.phone || '—'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 border-r border-warm-200 hidden md:table-cell">
-                        <div className="flex flex-wrap gap-1">
-                          {cats.map((x) => <CategoryPill key={x.key} category={x} />)}
-                          {c.googleLabels.filter((l) => !l.startsWith('CRM:')).map((l) => <Tag key={l} label={l} />)}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 border-r border-warm-200 hidden lg:table-cell text-sm text-warm-700">
-                        {c.location ? `${c.location.city}, ${c.location.country}` : '—'}
-                      </td>
-                      <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Card>
-        </>
+      {allLabels.length > 0 && !isTrashMode && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
+          <button onClick={() => setFilter(null)}
+            className={`text-xs px-3 py-1.5 rounded-full transition ${filter == null || filter === '' ? 'bg-sage-600 text-white shadow-sm' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+            All
+          </button>
+          {allLabels.map((l) => {
+            const count = state.contacts.filter((c) => !c.isDeleted && (c.crmLabels.some(lbl => lbl.toLowerCase().includes(l.label.replace(/^CRM:\s*/i, '').trim().toLowerCase())) || c.googleLabels.some(lbl => lbl.toLowerCase().includes(l.label.replace(/^CRM:\s*/i, '').trim().toLowerCase())))).length;
+            return (
+              <button key={l.key} onClick={() => setFilter(filter === l.key ? null : l.key)}
+                className={`text-xs px-3 py-1.5 rounded-full transition flex items-center gap-1.5 ${filter === l.key ? 'bg-sage-600 text-white shadow-sm' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+                {l.label.replace(/^CRM:\s*/, '')} <span className="opacity-60 font-mono text-[10px]">{count}</span>
+              </button>
+            );
+          })}
+          <button onClick={() => setEditLabelsOpen(true)} className="ml-2 px-3 py-1.5 rounded-full flex items-center justify-center border border-warm-300 bg-surface text-warm-600 hover:bg-warm-50 hover:text-warm-900 transition shadow-sm text-xs gap-1.5" title="Edit labels">
+            <span className="scale-[0.8]">{Icons.pencil}</span> Edit labels
+          </button>
+        </div>
       )}
 
-      <ImportContactsModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <Card className="overflow-hidden">
+        <table className="w-full border-collapse bg-surface">
+          <thead className="bg-surface text-xs text-warm-700 border-b border-warm-200">
+            <tr>
+              <th className="text-left py-4 px-4 font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('name')}>
+                Name{sortArrow('name')}
+              </th>
+              <th className="text-left py-4 px-4 hidden md:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('label')}>
+                Label{sortArrow('label')}
+              </th>
+              <th className="text-left py-4 px-4 hidden lg:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('location')}>
+                Location{sortArrow('location')}
+              </th>
+              <th className="text-left py-4 px-4 hidden md:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('lastContacted')}>
+                Last contacted{sortArrow('lastContacted')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              const favorites = rows.filter(c => c.isFavorite);
+              const others = rows.filter(c => !c.isFavorite);
+
+              const renderRow = (c) => {
+                const labs = labelsFor(c, state.customLabels);
+                const multi = labs.length > 1;
+                return (
+                  <tr key={c.id} onClick={() => openDrawer(c.id)}
+                    className="border-b border-warm-100 hover:bg-warm-50 cursor-pointer">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Avatar contact={c} size={36} />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-warm-900">{c.name}</div>
+                          <div className="text-xs text-warm-600">{c.email || c.phone || '—'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 hidden md:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {labs.map((x) => <LabelPill key={x.key} label={x} />)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell text-sm text-warm-700">
+                      {c.location ? `${c.location.city}, ${c.location.country}` : '—'}
+                    </td>
+                    <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
+                  </tr>
+                );
+              };
+
+              return (
+                <>
+                  {favorites.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={4} className="py-3 px-4 text-sm font-medium text-warm-900 border-b border-warm-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-500 scale-90">{Icons.starFilled || Icons.star}</span> Favorites ({favorites.length})
+                          </div>
+                        </td>
+                      </tr>
+                      {favorites.map(renderRow)}
+                    </>
+                  )}
+                  {others.length > 0 && (
+                    <>
+                      {favorites.length > 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-3 px-4 text-sm font-medium text-warm-900 border-b border-warm-100">
+                            Contacts
+                          </td>
+                        </tr>
+                      )}
+                      {others.map(renderRow)}
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div className="p-12 text-center text-warm-500">
+            No contacts found matching your criteria.
+          </div>
+        )}
+      </Card>
+
+      <EditLabelsModal open={editLabelsOpen} onClose={() => setEditLabelsOpen(false)} />
     </div>
   );
 }
@@ -2220,12 +2579,12 @@ function EventRow({ event }) {
   const unresolved = useMemo(() => getUnresolvedHints(event, state.contacts, state.dismissedAttendeeIds), [event, state.contacts, state.dismissedAttendeeIds]);
   const isInteractionLog = event.id.startsWith('log-');
 
+  const [removeGuestConfirm, setRemoveGuestConfirm] = useState(null);
+
   const handleRemoveGuest = (e, email, name) => {
     e.preventDefault();
     e.stopPropagation();
-    if (confirm(`Remove ${name} from this event?`)) {
-      removeGuestFromEvent(event.id, email);
-    }
+    setRemoveGuestConfirm({ email, name });
   };
 
   return (
@@ -2245,9 +2604,9 @@ function EventRow({ event }) {
             <button type="button" key={c.id} onClick={() => openDrawer(c.id)}
               onContextMenu={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
               className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-warm-100 transition group relative"
-              style={{ background: colorFor(c, state.customCategories) + '1a', border: `1px solid ${colorFor(c, state.customCategories)}33` }}>
+              style={{ background: colorFor(c, state.customLabels) + '1a', border: `1px solid ${colorFor(c, state.customLabels)}33` }}>
               <Avatar contact={c} size={20} />
-              <span className="text-xs font-medium" style={{ color: colorFor(c, state.customCategories) }}>{c.name}</span>
+              <span className="text-xs font-medium" style={{ color: colorFor(c, state.customLabels) }}>{c.name}</span>
               <div
                 onClick={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
                 className="absolute -top-1.5 -right-1.5 hidden group-hover:flex bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] items-center justify-center shadow-sm z-10"
@@ -2273,6 +2632,23 @@ function EventRow({ event }) {
           {Icons.externalLink}
         </a>
       )}
+
+      <Modal open={!!removeGuestConfirm} onClose={() => setRemoveGuestConfirm(null)} title="Remove guest?" size="sm">
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-warm-700">
+            Are you sure you want to remove <strong>{removeGuestConfirm?.name}</strong> from this event?
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button size="sm" variant="ghost" onClick={() => setRemoveGuestConfirm(null)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              removeGuestFromEvent(event.id, removeGuestConfirm.email);
+              setRemoveGuestConfirm(null);
+            }} className="bg-red-600 hover:bg-red-700 text-white border-transparent">
+              Remove guest
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   );
 }
@@ -2430,7 +2806,7 @@ function MapTab() {
   const hasPin = selectedContact && selectedContact.location && selectedContact.location.lat != null;
 
   const makePinIcon = (L, contact, selected) => {
-    const color = colorFor(contact, state.customCategories);
+    const color = colorFor(contact, state.customLabels);
     const size = selected ? 38 : 28;
     const border = selected ? 'border:3px solid white;box-shadow:0 0 0 2px ' + color + ';' : '';
     const inner = contact.photoUrl
@@ -2460,7 +2836,7 @@ function MapTab() {
     if (!map) return;
     Object.values(markersRef.current).forEach((m) => map.removeLayer(m));
     markersRef.current = {};
-    const filterCat = [...RESERVED_CATEGORIES, ...state.customCategories].find((c) => c.key === filterKey);
+    const filterCat = [...RESERVED_LABELS, ...state.customLabels].find((c) => c.key === filterKey);
     state.contacts.forEach((c) => {
       if (!c.location || c.location.lat == null || c.location.lng == null) return;
       if (filterCat && !c.crmLabels.includes(filterCat.label)) return;
@@ -2471,7 +2847,7 @@ function MapTab() {
       marker.addTo(map);
       markersRef.current[c.id] = marker;
     });
-  }, [state.contacts, state.customCategories, filterKey, selectedId]);
+  }, [state.contacts, state.customLabels, filterKey, selectedId]);
 
   // Pan to selected contact when selection changes
   useEffect(() => {
@@ -2537,8 +2913,8 @@ function MapTab() {
   const sidebarContacts = useMemo(() => {
     let r = state.contacts.filter((c) => c.location && c.location.lat != null);
     if (filterKey) {
-      const cat = [...RESERVED_CATEGORIES, ...state.customCategories].find((x) => x.key === filterKey);
-      if (cat) r = r.filter((c) => c.crmLabels.includes(cat.label));
+      const cat = [...RESERVED_LABELS, ...state.customLabels].find((x) => x.key === filterKey);
+      if (cat) r = r.filter((c) => labelsFor(c).some(l => l.label === cat.label));
     }
     if (droppedLatLng) {
       if (sort === 'closest') {
@@ -2553,7 +2929,7 @@ function MapTab() {
       r = [...r].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 30);
     }
     return r;
-  }, [state.contacts, state.customCategories, droppedLatLng, sort, radiusKm, filterKey]);
+  }, [state.contacts, state.customLabels, droppedLatLng, sort, radiusKm, filterKey]);
 
   return (
     <div className="h-full flex">
@@ -2577,8 +2953,8 @@ function MapTab() {
             {selectedId && <button onClick={() => setSelectedId(null)} className="text-warm-500 hover:text-warm-900 text-xl font-light leading-none">×</button>}
           </div>
           <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm">
-            <option value="">All categories</option>
-            {RESERVED_CATEGORIES.concat(state.customCategories).map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/, '')}</option>)}
+            <option value="">All labels</option>
+            {RESERVED_LABELS.concat(state.customLabels || []).map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/i, '')}</option>)}
           </select>
           {droppedLatLng && (
             <>
@@ -2612,7 +2988,7 @@ function MapTab() {
 
             {hasPin ? (
               <div className="text-xs text-warm-700 bg-warm-50 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(selectedContact, state.customCategories) }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(selectedContact, state.customLabels) }} />
                 {selectedContact.location.city}{selectedContact.location.country ? `, ${selectedContact.location.country}` : ''}
               </div>
             ) : (
@@ -2666,7 +3042,7 @@ function MapTab() {
                     {` · ${relativeDate(c.lastContactedAt)}`}
                   </div>
                 </div>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(c, state.customCategories) }} />
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(c, state.customLabels) }} />
               </button>
             );
           })}
@@ -2926,6 +3302,7 @@ function SettingsTab() {
   const { state, setState, setTheme } = useApp();
   const [showRawData, setShowRawData] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
 
@@ -3029,7 +3406,7 @@ function SettingsTab() {
         <div>
           <p className="text-sm text-warm-700 mb-2">Category colors</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {RESERVED_CATEGORIES.map((c) => (
+            {RESERVED_LABELS.map((c) => (
               <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg border border-warm-200 bg-surface text-sm">
                 <span className="w-4 h-4 rounded-full" style={{ background: c.color }} />
                 <span className="truncate">{c.label.replace(/^CRM:\s*/, '')}</span>
@@ -3113,11 +3490,11 @@ function SettingsTab() {
           <span>days</span>
         </div>
         <div>
-          <p className="text-sm text-warm-700 mb-2">Per-category cadence (group check-ins on Reconnect)</p>
+          <p className="text-sm text-warm-700 mb-2">Label colors</p>
           <div className="space-y-2">
-            {RESERVED_CATEGORIES.map((c) => (
+            {RESERVED_LABELS.map((c) => (
               <div key={c.key} className="flex items-center gap-3">
-                <span className="flex-1"><CategoryPill category={c} /></span>
+                <span className="flex-1"><LabelPill label={c} /></span>
                 <span className="text-xs text-warm-600">every</span>
                 <input type="number" min="0" value={state.nudges.groupCadence[c.key] || ''}
                   onChange={(e) => updateNudges({ groupCadence: { ...state.nudges.groupCadence, [c.key]: e.target.value ? Number(e.target.value) : 0 } })}
@@ -3137,13 +3514,25 @@ function SettingsTab() {
       <Card className="p-6 space-y-3">
         <h3 className="font-serif text-lg text-warm-900">Data</h3>
         <p className="text-sm text-warm-700">App-only data (LLM keys, nudges, custom fields, notes) is stored in your browser. Clearing does not touch Google.</p>
-        <Button variant="outline" onClick={() => {
-          if (confirm('Clear all app-only data? Your Google Contacts and Calendar are untouched.')) {
-            localStorage.removeItem(STORAGE_KEY);
-            window.location.reload();
-          }
-        }}>Clear app-only data</Button>
+        <Button variant="outline" onClick={() => setClearDataConfirm(true)}>Clear app-only data</Button>
       </Card>
+
+      <Modal open={clearDataConfirm} onClose={() => setClearDataConfirm(false)} title="Clear app-only data?" size="sm">
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-warm-700">
+            This will clear your LLM keys, nudges, custom fields, and notes from your browser. Your Google Contacts and Calendar will remain untouched.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button size="sm" variant="ghost" onClick={() => setClearDataConfirm(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              localStorage.removeItem(STORAGE_KEY);
+              window.location.reload();
+            }} className="bg-red-600 hover:bg-red-700 text-white border-transparent">
+              Clear data
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -3161,6 +3550,7 @@ function Dashboard() {
     map: <MapTab />,
     calendar: <CalendarTab />,
     contacts: <AllContactsTab />,
+    trash: <AllContactsTab />,
     help: <HelpTab />,
     settings: <SettingsTab />,
   };
