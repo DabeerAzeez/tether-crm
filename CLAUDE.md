@@ -24,6 +24,21 @@ npx serve -l 8000
 
 Allowed ports for testing: 8000, 8001, 8002, 8003. Google OAuth requires an HTTPS origin in production, but localhost works for development.
 
+## Linting & Testing
+
+To ensure code quality and correctness, run the following commands:
+
+```bash
+# Run ESLint on all source files
+npm run lint
+
+# Run Vitest tests once
+npm run test
+
+# Run tests in watch mode during development
+npm run test:watch
+```
+
 ## Architecture
 
 **TetherCRM** is a privacy-first personal CRM — a static single-page app with no backend.

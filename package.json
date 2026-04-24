@@ -1,0 +1,22 @@
+{
+  "name": "tether-crm",
+  "version": "0.5.0",
+  "description": "Privacy-first personal CRM — static React SPA, no build step. Runtime dependencies load from CDN.",
+  "private": true,
+  "scripts": {
+    "lint": "eslint \"src/**/*.{js,jsx}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "serve": "npx serve -l 8000"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/eslint-parser": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.0",
+    "globals": "^15.0.0",
+    "jsdom": "^24.0.0",
+    "vitest": "^1.6.0"
+  }
+}

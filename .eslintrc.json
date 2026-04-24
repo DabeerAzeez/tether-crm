@@ -1,0 +1,68 @@
+{
+  "root": true,
+  "parser": "@babel/eslint-parser",
+  "parserOptions": {
+    "requireConfigFile": false,
+    "ecmaVersion": 2022,
+    "sourceType": "script",
+    "ecmaFeatures": {
+      "jsx": true
+    },
+    "babelOptions": {
+      "presets": ["@babel/preset-react"]
+    }
+  },
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "plugins": ["react"],
+  "extends": ["eslint:recommended", "plugin:react/recommended"],
+  "settings": {
+    "react": {
+      "version": "18.0"
+    }
+  },
+  "globals": {
+    "React": "readonly",
+    "ReactDOM": "readonly",
+    "Babel": "readonly",
+    "L": "readonly",
+    "gapi": "readonly",
+    "google": "readonly",
+    "TetherGoogle": "readonly",
+    "TETHER_MOCK": "readonly",
+    "TETHER_CONFIG": "readonly",
+    "TetherHelpers": "readonly",
+    "tailwind": "readonly"
+  },
+  "rules": {
+    "react/prop-types": "off",
+    "react/no-unknown-property": ["error", { "ignore": ["jsx", "global"] }],
+    "react/display-name": "off",
+    "react/no-unescaped-entities": "off",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-cond-assign": ["error", "except-parens"],
+    "no-control-regex": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.js"],
+      "env": {
+        "node": true
+      },
+      "globals": {
+        "describe": "readonly",
+        "it": "readonly",
+        "test": "readonly",
+        "expect": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly",
+        "beforeAll": "readonly",
+        "afterAll": "readonly",
+        "vi": "readonly"
+      }
+    }
+  ]
+}
