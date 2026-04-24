@@ -1,6 +1,5 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# AGENTS.md
+This file provides guidance to agents when working with code in this repository.
 
 ## After Every Code Change
 
@@ -8,11 +7,7 @@ Start the dev server and open the app in the browser to check for syntax errors 
 
 ## Product Requirements
 
-The full PRD is at `.ai/PRD.md`. Key points relevant to implementation decisions:
-
-- **Storage target (current vs. PRD):** The PRD specifies Google Contacts + Google Calendar as the source of truth with IndexedDB for app-only data. The current implementation diverged from this — it uses Google Drive `appDataFolder` as the primary store instead of writing back to Google Contacts. New work should follow the PRD's intent (People API write-back) unless otherwise directed.
-- **`CRM:` label prefix:** Categories are Google Contact labels prefixed with `CRM:` (e.g. `CRM: Close Friends`). The label namespace is what the PRD defines — mapping this correctly matters for round-tripping edits to Google.
-- **Milestones:** M1–M3 are largely complete. M4 (interaction logging → `Personal CRM` calendar) and M5 (Calendar attendee resolution with write-back) are the next active areas. M7 (Ask/LLM) is a placeholder UI only.
+The full PRD is at `.ai/PRD.md`.
 
 ## Dev Server
 
