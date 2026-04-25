@@ -68,9 +68,46 @@
 </head>
 <body class="bg-warm-50 text-warm-900 font-sans antialiased">
   <div id="root"></div>
+
+  <!-- Data & API layer (no React dependency) -->
   <script type="text/babel" src="src/data.js"></script>
   <script src="src/google.js"></script>
   <script src="src/config.js"></script>
-  <script type="text/babel" src="src/app.jsx"></script>
+  <script src="src/helpers.js"></script>
+  <script src="src/storage.js"></script>
+
+  <!-- Sequential loader for JSX modules. Each transpiled module is wrapped in
+       an IIFE so its top-level `const`/`let` declarations (e.g. `const { useState }
+       = React;`) are function-scoped instead of leaking into the shared script-
+       level lexical scope, which would otherwise cause "Identifier has already
+       been declared" errors across modules. Modules still publish their exports
+       via `window.Tether*` before the IIFE returns. -->
+  <script>
+    (async function loadModules() {
+      const files = [
+        'src/constants.jsx',
+        'src/components.jsx',
+        'src/context.jsx',
+        'src/drawer.jsx',
+        'src/sidebar.jsx',
+        'src/onboarding.jsx',
+        'src/tabs.jsx',
+        'src/app.jsx',
+      ];
+      for (const file of files) {
+        try {
+          const res = await fetch(file);
+          const code = await res.text();
+          const output = Babel.transform(code, { presets: ['react'] });
+          const script = document.createElement('script');
+          script.textContent = '(function(){\n' + output.code + '\n})();';
+          document.head.appendChild(script);
+        } catch (e) {
+          console.error('[Tether] Failed to load ' + file + ':', e);
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
+
