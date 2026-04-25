@@ -9,19 +9,23 @@
 
 ## 1. Summary
 
-A privacy-preserving personal CRM web app that helps users maintain meaningful relationships with 100–300 contacts. Users sign in with Google, import their contacts, log interactions manually, sync their Google Calendar to see who they've spent time with, receive proactive nudges to reconnect with close friends, query their network in natural language, and view contacts geographically.
+A privacy-preserving personal CRM web app that helps users maintain meaningful relationships with 100-300 contacts. Users sign in with Google, import their contacts, log interactions manually, sync their Google Calendar to see who they've spent time with, receive proactive nudges to reconnect with close friends, query their network in natural language, and view contacts geographically.
 
 All contact and CRM data is stored in a private JSON file in the user's Google Drive appDataFolder — portable across browsers without requiring a backend. Google Contacts (and potentially other sources in future) can be imported during onboarding to seed the contact list, but the app does not write back to Google Contacts.
 
 ## 2. Problem statement
 
-Maintaining a wide social and professional network is hard. Important friendships quietly decay because there's no lightweight system to track when you last connected. Existing tools are either heavyweight sales CRMs (Salesforce, HubSpot) optimized for pipelines, or generic contact apps (Google Contacts) with no relationship intelligence. Users who value their network need something between these — a low-friction tool for *personal* relationship management that respects privacy and doesn't require duplicating contact data into yet another silo.
+Maintaining a wide social and professional network is hard. You can likely keep only about 10 people at the top of your mind, but contacts you met in another country, or a networking event, or even back in school who might be able to help you out today have probably slipped through the cracks of your memory and whatever contacts app you use. That's because because there's no lightweight system to keep track of everyone. Existing CRM tools are either optimized for sales pipelines, too complex to set up, require a paid membership, or are too basic and lack modern relationship intelligence features like being able to search and chat with your network, integrate with calendar events, or connect to LinkedIn. Users who value their network need something between these -- a low-friction free *personal* relationship management (PRM).
 
 ## 3. Target user
 
 - **Primary persona:** Social connector, 100–300 contacts, mix of close friends, casual acquaintances, and professional contacts. 
 - **Behaviors:** Travels periodically, values friendships, attends networking events, wants to be intentional about maintaining relationships without it feeling transactional.
-- **Pain points:** Forgets to reach out to close friends for months; can't recall which friend lives in a city they're visiting; has no searchable memory of "who do I know who does X."
+- **Pain points:** 
+  - Doesn't realize how long it's been since they've last contacted a certain friend
+  - Can't recall which friend lives in a city they're visiting
+  - Adds contacts from LinkedIn at a networking event but forgets about them later when they need expertise or a reference in a specific industry
+  - Has no searchable memory of "who do I know who does X"
 
 ## 4. Goals & non-goals
 
@@ -432,17 +436,12 @@ Since this is free and open source with no telemetry, traditional product metric
   - ~~Add contact sorting (name, last contacted, category, location).~~
   - ~~Add basic search/filter by name and label~~
 - **M3 — Categories + Reconnect**
-  - CRM category system (app-internal, stored in Drive), label → category mapping during onboarding, default light/dark color themes, Deep Purple for multi-category, per-contact and per-category nudges, Reconnect empty-state.
-  - Implement CRM category logic (stored in Drive JSON, not Google Contacts labels).
-  - Build category mapping UI for onboarding (map imported labels to CRM categories).
-  - Design and implement light/dark theme system.
-  - Implement "Deep Purple" logic for contacts in multiple categories.
-  - Create Reconnect dashboard tab.
-  - Implement per-contact nudge threshold settings.
-  - Implement group-level nudge cadences for categories.
-  - Build Reconnect empty-state with guided setup.
-  - Add "recent activity" feed to Reconnect tab.
-  - Implement "staleness" visual indicators on contact cards.
+  - ~~Design and implement light/dark theme system.~~
+  - ~~Create Reconnect dashboard tab.~~
+  - ~~Implement per-contact nudge threshold settings.~~
+  - ~~Implement group-level nudge cadences for categories.~~
+  - ~~Build Reconnect empty-state with guided setup.~~
+  - ~~Implement "staleness" visual indicators on contact cards.~~
 - **M4 — Interaction logging**
   - Manual log flow, bulk log, interaction history, write to `Personal CRM` Google Calendar (no guest invites).
   - Create "Log Interaction" modal/form with date, type, and note fields.
