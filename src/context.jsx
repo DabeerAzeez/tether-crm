@@ -49,8 +49,10 @@ function AppProvider({ children }) {
       settings: {
         theme: state.theme,
         llm: state.llm,
-        calendarWriteEnabled: state.calendarWriteEnabled,
         walkthroughDone: state.walkthroughDone,
+        resolvedEventIds: state.resolvedEventIds || [],
+        dismissedEventIds: state.dismissedEventIds || [],
+        calendarKeywordBlacklist: state.calendarKeywordBlacklist || [],
       },
       nudges: state.nudges,
     }).catch((e) => {
@@ -224,6 +226,40 @@ function AppProvider({ children }) {
     }));
   }, [setState]);
 
+  const resolveEvent = useCallback((eventId) => {
+    setState((s) => {
+      const resolvedEventIds = [...(s.resolvedEventIds || []), eventId];
+      const updated = { ...s, resolvedEventIds };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+  }, [setState, saveToDrive]);
+
+  const dismissEvent = useCallback((eventId) => {
+    setState((s) => {
+      const dismissedEventIds = [...(s.dismissedEventIds || []), eventId];
+      const updated = { ...s, dismissedEventIds };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+  }, [setState, saveToDrive]);
+
+  const addManualEvent = useCallback((title, date, contactIds) => {
+    setState((s) => {
+      const start = new Date(date).toISOString();
+      const newEvent = {
+        id: `manual-${uid()}`,
+        title,
+        start, end: start, location: '', description: 'Manually added past event',
+        guestEmails: contactIds.map(id => s.contacts.find(c => c.id === id)?.email).filter(Boolean),
+        synthetic: true,
+      };
+      const events = [newEvent, ...s.events].sort((a, b) => new Date(b.start) - new Date(a.start));
+      // NOTE: Manual events are only kept in memory during the session as per PRD unless added to settings.
+      return { ...s, events };
+    });
+  }, [setState]);
+
   const addCustomLabel = useCallback((label, color) => {
     const key = label.replace(/^CRM:\s*/, '').toLowerCase().replace(/\s+/g, '-');
     const full = label.startsWith('CRM:') ? label : `CRM: ${label}`;
@@ -372,6 +408,7 @@ function AppProvider({ children }) {
     updateContact, deleteContactPermanently, addCrmLabelToContact, removeCrmLabelFromContact,
     logInteraction, logInteractionMany,
     resolveEventAttendee, dismissAttendee,
+    resolveEvent, dismissEvent, addManualEvent,
     addGuestToEvent, removeGuestFromEvent,
     addCustomLabel, renameLabel, deleteLabel, setTheme,
     allLabels,

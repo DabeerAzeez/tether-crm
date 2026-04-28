@@ -386,7 +386,6 @@ function LogInteractionModal() {
   const [location, setLocation] = useState('');
   const [extraIds, setExtraIds] = useState([]); // bulk log
   const [bulkSearch, setBulkSearch] = useState('');
-  const [calPrompt, setCalPrompt] = useState(false);
 
   useEffect(() => {
     if (logForId) {
@@ -410,13 +409,7 @@ function LogInteractionModal() {
     const iso = new Date(date).toISOString();
     const ids = [logForId, ...extraIds];
     logInteractionMany(ids, { date: iso, type, note, location });
-    // First-ever log: prompt for calendar write
-    if (!state.calendarWriteEnabled && !localStorage.getItem('tether-cal-asked')) {
-      localStorage.setItem('tether-cal-asked', '1');
-      setCalPrompt(true);
-    } else {
-      closeLog();
-    }
+    closeLog();
   };
 
   return (
@@ -482,16 +475,6 @@ function LogInteractionModal() {
         </div>
       </div>
 
-      {calPrompt && (
-        <div className="p-5 bg-sage-50 border-t border-sage-200 text-sm">
-          <p className="font-medium text-warm-900 mb-1">Write interactions to Google Calendar?</p>
-          <p className="text-warm-700 mb-3">We'll create a dedicated <strong>Personal CRM</strong> calendar and add this interaction — no guest invites, so nothing gets emailed to the contact.</p>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => { setCalPrompt(false); closeLog(); }}>Not now</Button>
-            <Button size="sm" onClick={() => { setState((s) => ({ ...s, calendarWriteEnabled: true })); setCalPrompt(false); closeLog(); }}>Enable</Button>
-          </div>
-        </div>
-      )}
     </Modal>
   );
 }

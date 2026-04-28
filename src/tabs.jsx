@@ -647,11 +647,10 @@ function AllContactsTab() {
                   onClick={searchWithAI}
                   disabled={!state.llm?.connected || !query.trim() || aiLoading}
                   title={!state.llm?.connected ? 'Configure an AI model in Settings to use this feature' : undefined}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    aiMode
-                      ? 'bg-violet-600 hover:bg-violet-700 border-violet-600 text-white'
-                      : 'bg-surface border-warm-300 text-warm-700 hover:bg-warm-50'
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${aiMode
+                    ? 'bg-violet-600 hover:bg-violet-700 border-violet-600 text-white'
+                    : 'bg-surface border-warm-300 text-warm-700 hover:bg-warm-50'
+                    }`}
                 >
                   {aiLoading
                     ? <span className="flex items-center gap-2"><span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />Searching…</span>
@@ -844,25 +843,52 @@ function AllContactsTab() {
 // ───────────────────────────────────────────────────────────────────
 
 function CalendarTab() {
-  const { state } = useApp();
+  const { state, resolveEvent, dismissEvent } = useApp();
+  const [pendingCollapsed, setPendingCollapsed] = useState(false);
+  const [addManualOpen, setAddManualOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  const past = useMemo(() => state.events.filter((e) => new Date(e.start) < new Date()).sort((a, b) => new Date(b.start) - new Date(a.start)), [state.events]);
-  const future = useMemo(() => state.events.filter((e) => new Date(e.start) >= new Date()).sort((a, b) => new Date(a.start) - new Date(b.start)), [state.events]);
+  const blacklisted = (e) => {
+    return (state.calendarKeywordBlacklist || []).some((kw) => e.title.toLowerCase().includes(kw.toLowerCase()));
+  };
+  const dismissed = (e) => state.dismissedEventIds?.includes(e.id);
+  const visible = (e) => !blacklisted(e) && !dismissed(e);
 
-  const unresolvedCount = useUnresolvedCount();
+  const now = new Date();
+
+  const upcoming = [];
+  const pending = [];
+  const past = [];
+
+  state.events.forEach((e) => {
+    if (!visible(e)) return;
+    const start = new Date(e.start);
+    if (start >= now) {
+      upcoming.push(e);
+    } else {
+      if (!e.synthetic && !state.resolvedEventIds?.includes(e.id)) {
+        pending.push(e);
+      } else {
+        past.push(e);
+      }
+    }
+  });
+
+  upcoming.sort((a, b) => new Date(a.start) - new Date(b.start));
+  pending.sort((a, b) => new Date(b.start) - new Date(a.start));
+  past.sort((a, b) => new Date(b.start) - new Date(a.start));
+
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="font-serif text-3xl text-warm-900">Calendar</h1>
-          <p className="text-warm-600 mt-1">Events from Google Calendar — last 3 months and upcoming.</p>
+          <p className="text-warm-600 mt-1">Who have you been spending time with?</p>
         </div>
-        {unresolvedCount > 0 && (
-          <div className="text-sm px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
-            <strong>{unresolvedCount}</strong> event{unresolvedCount === 1 ? '' : 's'} with unresolved attendees — tap the <span className="font-bold">?</span> chips to resolve.
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => setAddManualOpen(true)} icon={Icons.plus}>Add Past Event</Button>
+        </div>
       </div>
 
       {state.contacts.length === 0 ? (
@@ -879,117 +905,235 @@ function CalendarTab() {
         </Card>
       ) : (
         <>
-          {future.length > 0 && (
+          {pending.length > 0 && (
+            <section className="bg-amber-50 border border-amber-200 rounded-xl relative">
+              <div
+                className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition rounded-t-xl"
+                onClick={() => setPendingCollapsed(!pendingCollapsed)}
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-serif text-lg text-amber-900 flex items-center gap-2">
+                      <span className="scale-75 origin-left transform transition-transform" style={{ display: 'inline-block', rotate: pendingCollapsed ? '-90deg' : '0deg' }}>▼</span>
+                      Pending Inbox ({pending.length})
+                    </h2>
+                    <div className="relative flex items-center">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowHelp(!showHelp); }}
+                        onMouseEnter={() => setShowHelp(true)}
+                        onMouseLeave={() => setShowHelp(false)}
+                        className="text-amber-700 hover:text-amber-900 transition p-1 rounded-full hover:bg-amber-200/60"
+                      >
+                        {Icons.help}
+                      </button>
+                      {showHelp && (
+                        <div className="absolute z-50 top-full left-0 mt-2 w-80 bg-white text-warm-900 text-sm rounded-xl p-4 shadow-xl border border-amber-200 cursor-default pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                          <p className="mb-3 text-warm-700">
+                            Tether pulls all your calendar events to ensure nothing slips through the cracks. Use this inbox to verify who you actually met with and when.
+                          </p>
+                          <p className="mb-2 flex items-start gap-2 text-sage-800">
+                            <span className="mt-1 shrink-0 text-sage-600">{Icons.check}</span>
+                            <span><strong>Click Check (✓)</strong> to log a meetup to Tether and move it to your history. Make sure you've added all attendees who were there!</span>
+                          </p>
+                          <p className="flex items-start gap-2 text-red-800">
+                            <span className="mt-1 shrink-0 text-red-600">{Icons.x}</span>
+                            <span><strong>Click Dismiss (✕)</strong> to remove irrelevant events (like work blocks or chores where you didn't interact with anyone) from your archive.</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">Review and curate your social history.</p>
+                </div>
+              </div>
+              {!pendingCollapsed && (
+                <div className="px-6 pb-6 space-y-2">
+                  {pending.map((e) => <EventRow key={e.id} event={e} showActions={true} onResolve={() => resolveEvent(e.id)} onDismiss={() => dismissEvent(e.id)} />)}
+                </div>
+              )}
+            </section>
+          )}
+
+          {upcoming.length > 0 && (
             <section>
               <SectionHeader>Upcoming</SectionHeader>
               <div className="space-y-2">
-                {future.map((e) => <EventRow key={e.id} event={e} />)}
+                {upcoming.map((e) => <EventRow key={e.id} event={e} />)}
               </div>
             </section>
           )}
 
           <section>
-            <SectionHeader>Past 3 months</SectionHeader>
+            <SectionHeader>Past Events</SectionHeader>
             <div className="space-y-2">
               {past.map((e) => <EventRow key={e.id} event={e} />)}
+              {past.length === 0 && <p className="text-sm text-warm-500 py-4 italic text-center">No past events found.</p>}
             </div>
           </section>
         </>
       )}
+
+      <AddManualEventModal open={addManualOpen} onClose={() => setAddManualOpen(false)} />
     </div>
   );
 }
 
-function EventRow({ event }) {
+function EventRow({ event, showActions, onResolve, onDismiss }) {
   const { state, resolveEventAttendee, dismissAttendee, removeGuestFromEvent } = useApp();
   const { open: openDrawer } = useDrawer();
 
+  const [isResolving, setIsResolving] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+
   const matchedContacts = useMemo(() =>
     (event.guestEmails || [])
-      .map((em) => state.contacts.find((c) => (c.email || '').toLowerCase() === em.toLowerCase()))
+      .map((em) => {
+        const foundByEmail = state.contacts.find((c) => (c.email || '').toLowerCase() === em.toLowerCase());
+        if (foundByEmail) return foundByEmail;
+        const match = em.match(/^([^@]+)@contact\.local$/i);
+        if (match) {
+          return state.contacts.find((c) => c.id === match[1]);
+        }
+        return null;
+      })
       .filter(Boolean),
     [event.guestEmails, state.contacts]
   );
   const unresolved = useMemo(() => getUnresolvedHints(event, state.contacts, state.dismissedAttendeeIds), [event, state.contacts, state.dismissedAttendeeIds]);
   const isInteractionLog = event.id.startsWith('log-');
 
-  const [removeGuestConfirm, setRemoveGuestConfirm] = useState(null);
 
-  const handleRemoveGuest = (e, email, name) => {
+  const handleRemoveGuest = (e, email) => {
     e.preventDefault();
     e.stopPropagation();
-    setRemoveGuestConfirm({ email, name });
+    removeGuestFromEvent(event.id, email);
+  };
+
+  const handleResolve = () => {
+    if (unresolved.length > 0) return;
+    setIsResolving(true);
+    setIsLeaving(true);
+    setTimeout(() => {
+      onResolve();
+    }, 500);
+  };
+
+  const handleDismiss = () => {
+    setIsDismissing(true);
+    setIsLeaving(true);
+    setTimeout(() => {
+      onDismiss();
+    }, 500);
   };
 
   return (
-    <Card className={`p-4 flex items-start gap-4 ${isInteractionLog ? 'bg-sage-50/50' : ''}`}>
-      <div className="text-center w-14 shrink-0">
-        <div className="text-xs text-warm-600 uppercase">{new Date(event.start).toLocaleDateString(undefined, { month: 'short' })}</div>
-        <div className="text-2xl font-serif text-warm-900 leading-none">{new Date(event.start).getDate()}</div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-warm-900">{event.title}</span>
-          {isInteractionLog && <span className="text-xs px-2 py-0.5 rounded-full bg-sage-100 text-sage-800 border border-sage-200">Tether log</span>}
+    <div
+      style={{
+        maxHeight: isLeaving ? '0px' : '500px',
+        opacity: isLeaving ? 0 : 1,
+        paddingTop: isLeaving ? '0px' : '',
+        paddingBottom: isLeaving ? '0px' : '',
+        transform: isResolving
+          ? 'scale(0.95) translateY(40px)'
+          : isDismissing
+            ? 'translate(300px, -300px) rotate(25deg) scale(0.6)'
+            : 'none',
+      }}
+      className={`transition-all duration-500 ease-in-out relative ${
+        isLeaving || isResolving || isDismissing ? 'overflow-hidden' : ''
+      } ${isResolving
+        ? 'ring-2 ring-sage-600 shadow-[0_0_15px_rgba(101,119,94,0.6)] rounded-xl'
+        : ''
+        }`}
+    >
+      <div
+        style={{
+          backgroundColor: isResolving
+            ? 'rgba(34, 197, 94, 0.15)'
+            : isDismissing
+              ? 'rgba(239, 68, 68, 0.15)'
+              : 'transparent'
+        }}
+        className="absolute inset-0 z-10 pointer-events-none transition-colors duration-500 rounded-2xl"
+      />
+      <Card className={`p-4 flex items-start gap-4 ${isInteractionLog ? 'bg-sage-50/50' : ''}`}>
+        <div className="text-center w-14 shrink-0">
+          <div className="text-xs text-warm-600 uppercase">{new Date(event.start).toLocaleDateString(undefined, { month: 'short' })}</div>
+          <div className="text-2xl font-serif text-warm-900 leading-none">{new Date(event.start).getDate()}</div>
         </div>
-        <div className="text-xs text-warm-600 mt-0.5">{new Date(event.start).toLocaleDateString()} {event.location ? `· ${event.location}` : ''}</div>
-        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-          {matchedContacts.map((c) => (
-            <button type="button" key={c.id} onClick={() => openDrawer(c.id)}
-              onContextMenu={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-warm-100 transition group relative"
-              style={{ background: colorFor(c, state.customLabels) + '1a', border: `1px solid ${colorFor(c, state.customLabels)}33` }}>
-              <Avatar contact={c} size={20} />
-              <span className="text-xs font-medium" style={{ color: colorFor(c, state.customLabels) }}>{c.name}</span>
-              <div
-                onClick={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
-                className="absolute -top-1.5 -right-1.5 hidden group-hover:flex bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] items-center justify-center shadow-sm z-10"
-              >×</div>
-            </button>
-          ))}
-          {unresolved.map((u) => (
-            <UnresolvedChip key={u.firstName} event={event} hint={u}
-              onConfirm={(cId) => resolveEventAttendee(event.id, cId, u.firstName)}
-              onDismiss={() => dismissAttendee(event.id, u.firstName)} />
-          ))}
-          <AddGuestButton event={event} />
-          {matchedContacts.length === 0 && unresolved.length === 0 && (
-            <span className="text-xs text-warm-500 italic">No attendees matched</span>
-          )}
-        </div>
-        {event.description && <div className="text-xs text-warm-700 mt-1.5">{event.description}</div>}
-      </div>
-      {!isInteractionLog && event.htmlLink && (
-        <a href={event.htmlLink} target="_blank" rel="noreferrer"
-          title="Open in Google Calendar"
-          className="shrink-0 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition">
-          {Icons.externalLink}
-        </a>
-      )}
-
-      <Modal open={!!removeGuestConfirm} onClose={() => setRemoveGuestConfirm(null)} title="Remove guest?" size="sm">
-        <div className="p-6 space-y-4">
-          <p className="text-sm text-warm-700">
-            Are you sure you want to remove <strong>{removeGuestConfirm?.name}</strong> from this event?
-          </p>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button size="sm" variant="ghost" onClick={() => setRemoveGuestConfirm(null)}>Cancel</Button>
-            <Button size="sm" onClick={() => {
-              removeGuestFromEvent(event.id, removeGuestConfirm.email);
-              setRemoveGuestConfirm(null);
-            }} className="bg-red-600 hover:bg-red-700 text-white border-transparent">
-              Remove guest
-            </Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-warm-900">{event.title}</span>
+            {isInteractionLog && <span className="text-xs px-2 py-0.5 rounded-full bg-sage-100 text-sage-800 border border-sage-200">Tether log</span>}
+          </div>
+          <div className="text-xs text-warm-600 mt-0.5">{new Date(event.start).toLocaleDateString()} {event.location ? `· ${event.location}` : ''}</div>
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            {matchedContacts.map((c) => (
+              <button type="button" key={c.id} onClick={() => openDrawer(c.id)}
+                onContextMenu={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-warm-100 transition group relative"
+                style={{ background: colorFor(c, state.customLabels) + '1a', border: `1px solid ${colorFor(c, state.customLabels)}33` }}>
+                <Avatar contact={c} size={20} />
+                <span className="text-xs font-medium" style={{ color: colorFor(c, state.customLabels) }}>{c.name}</span>
+                <div
+                  onClick={(e) => handleRemoveGuest(e, c.email || `${c.id}@contact.local`, c.name)}
+                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] items-center justify-center shadow-sm z-10"
+                >×</div>
+              </button>
+            ))}
+            {unresolved.map((u) => (
+              <UnresolvedChip key={u.firstName} event={event} hint={u}
+                onConfirm={(cId) => resolveEventAttendee(event.id, cId, u.firstName)}
+                onDismiss={() => dismissAttendee(event.id, u.firstName)} />
+            ))}
+            <AddGuestButton event={event} />
+            {matchedContacts.length === 0 && unresolved.length === 0 && (
+              <span className="text-xs text-warm-500 italic">No attendees matched</span>
+            )}
           </div>
         </div>
-      </Modal>
-    </Card>
+        {!isInteractionLog && event.htmlLink && (
+          <a href={event.htmlLink} target="_blank" rel="noreferrer"
+            title="Open in Google Calendar"
+            className="shrink-0 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition">
+            {Icons.externalLink}
+          </a>
+        )}
+        {showActions && (
+          <div className="shrink-0 flex items-center gap-1.5 ml-2">
+            <button
+              disabled={unresolved.length > 0}
+              onClick={handleResolve}
+              title="Save to Tether & Move to Past Events"
+              className={`p-2 rounded-lg transition border border-transparent ${unresolved.length > 0
+                ? 'text-warm-400 opacity-40 cursor-not-allowed'
+                : 'text-sage-600 hover:bg-green-100/60 hover:shadow-[0_0_10px_rgba(34,197,94,0.4)] hover:text-green-700 hover:border-green-300'
+                }`}
+            >
+              {Icons.check}
+            </button>
+            <button
+              onClick={handleDismiss}
+              title="Ignore & Dismiss from Tether"
+              className="p-2 rounded-lg text-warm-400 hover:text-red-700 hover:bg-red-100/60 hover:shadow-[0_0_10px_rgba(239,68,68,0.4)] hover:border-red-300 transition border border-transparent"
+            >
+              {Icons.x}
+            </button>
+          </div>
+        )}
+
+
+      </Card>
+    </div>
   );
 }
 
 function AddGuestButton({ event }) {
   const { state, addGuestToEvent } = useApp();
   const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
 
   const suggestions = useMemo(() => {
@@ -997,49 +1141,52 @@ function AddGuestButton({ event }) {
     const confirmedEmails = new Set((event.guestEmails || []).map((e) => e.toLowerCase()));
     const q = search.toLowerCase();
     return state.contacts
-      .filter((c) => !confirmedEmails.has((c.email || '').toLowerCase()))
+      .filter((c) => !confirmedEmails.has((c.email || '').toLowerCase()) && !confirmedEmails.has(`${c.id}@contact.local`.toLowerCase()))
       .filter((c) => c.name.toLowerCase().includes(q))
       .sort((a, b) => importanceScore(b) - importanceScore(a))
       .slice(0, 5);
   }, [search, event.guestEmails, state.contacts]);
 
-  if (!open) {
-    return (
-      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+  return (
+    <div className="relative">
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         title="Add guest"
         className="w-7 h-7 rounded-full bg-warm-100 hover:bg-warm-200 border border-warm-300 flex items-center justify-center text-warm-600 transition shrink-0">
         {Icons.plus}
       </button>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
-      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-warm-700">Add contact to event</span>
-          <button type="button" onClick={() => setOpen(false)} className="text-warm-500 hover:text-warm-700">{Icons.x}</button>
-        </div>
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
-          autoFocus
-          placeholder="Search by name..."
-          className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm mb-2" />
-        <div className="max-h-64 overflow-y-auto space-y-1">
-          {search && suggestions.length === 0 && <div className="text-xs text-warm-500 italic p-2">No matches</div>}
-          {!search && <div className="text-xs text-warm-500 italic p-2 text-center">Type to search contacts</div>}
-          {suggestions.map((c) => (
-            <button type="button" key={c.id} onMouseDown={(e) => e.preventDefault()} onClick={() => { addGuestToEvent(event.id, c.id); setOpen(false); }}
-              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-warm-100 text-left">
-              <Avatar contact={c} size={28} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
-                <div className="text-xs text-warm-600 truncate">{c.email}</div>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-warm-700">Add contact to event</span>
+              <button type="button" onClick={() => setOpen(false)} className="text-warm-500 hover:text-warm-700">{Icons.x}</button>
+            </div>
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+              placeholder="Search by name..."
+              className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm mb-2" />
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {search && suggestions.length === 0 && <div className="text-xs text-warm-500 italic p-2">No matches</div>}
+              {!search && <div className="text-xs text-warm-500 italic p-2 text-center">Type to search contacts</div>}
+              {suggestions.map((c) => (
+                <button type="button" key={c.id} onMouseDown={(e) => e.preventDefault()} onClick={() => { addGuestToEvent(event.id, c.id); setOpen(false); }}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-warm-100 text-left">
+                  <Avatar contact={c} size={28} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
+                    <div className="text-xs text-warm-600 truncate">{c.email}</div>
+                  </div>
+                </button>
+              ))}
+              <div className="pt-2 mt-2 border-t border-warm-200">
+                <button type="button" onClick={(e) => { e.preventDefault(); setOpen(false); setPickerOpen(true); }} className="w-full text-xs text-center font-medium text-sage-600 hover:text-sage-800 p-2 rounded hover:bg-sage-50 transition">See More</button>
               </div>
-            </button>
-          ))}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      )}
+      {pickerOpen && <ContactPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} excludeEmails={event.guestEmails || []} onPick={(pickedContacts) => { pickedContacts.forEach(c => addGuestToEvent(event.id, c.id)); setPickerOpen(false); }} />}
     </div>
   );
 }
@@ -1047,6 +1194,7 @@ function AddGuestButton({ event }) {
 function UnresolvedChip({ event, hint, onConfirm, onDismiss }) {
   const { state } = useApp();
   const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState(hint.firstName);
 
   const suggestions = useMemo(() => {
@@ -1057,7 +1205,7 @@ function UnresolvedChip({ event, hint, onConfirm, onDismiss }) {
 
     const q = search.toLowerCase();
     return state.contacts
-      .filter((c) => !confirmedEmails.has((c.email || '').toLowerCase()))
+      .filter((c) => !confirmedEmails.has((c.email || '').toLowerCase()) && !confirmedEmails.has(`${c.id}@contact.local`.toLowerCase()))
       .map((c) => {
         let score = 0;
         if (c.name.toLowerCase().includes(q)) score += 50;
@@ -1074,45 +1222,248 @@ function UnresolvedChip({ event, hint, onConfirm, onDismiss }) {
       .map((x) => x.c);
   }, [search, event, state.contacts]);
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-warm-100 hover:bg-warm-200 border border-dashed border-warm-400 text-xs text-warm-700">
-        <span className="w-4 h-4 rounded-full bg-warm-300 flex items-center justify-center text-[10px] font-bold">?</span>
-        <span>{hint.firstName}</span>
-      </button>
-    );
-  }
-
   return (
     <div className="relative">
-      <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-      <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-warm-700">Resolve "{hint.firstName}"</span>
-          <button onClick={() => setOpen(false)} className="text-warm-500">{Icons.x}</button>
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-warm-100 hover:bg-warm-200 border border-dashed border-warm-400 text-xs text-warm-700">
+          <span className="w-4 h-4 rounded-full bg-warm-300 flex items-center justify-center text-[10px] font-bold">?</span>
+          <span>{hint.firstName}</span>
+        </button>
+      ) : (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 top-full left-0 mt-1 w-80 bg-surface rounded-xl shadow-xl border border-warm-200 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-warm-700">Resolve "{hint.firstName}"</span>
+              <button onClick={() => setOpen(false)} className="text-warm-500">{Icons.x}</button>
+            </div>
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search any contact"
+              className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm mb-2" />
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {suggestions.length === 0 && <div className="text-xs text-warm-500 italic p-2">No matches</div>}
+              {suggestions.map((c) => (
+                <button key={c.id} onClick={() => { onConfirm(c.id); setOpen(false); }}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-warm-100 text-left">
+                  <Avatar contact={c} size={28} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
+                    <div className="text-xs text-warm-600 truncate">{c.location?.city}{c.custom?.company ? ` · ${c.custom.company}` : ''}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="pt-2 mt-2 border-t border-warm-200 flex justify-between items-center gap-2">
+              <button onClick={() => { setOpen(false); setPickerOpen(true); }} className="text-xs font-medium text-sage-600 hover:text-sage-800 px-2 transition">See More</button>
+              <Button size="sm" variant="ghost" onClick={() => { onDismiss(); setOpen(false); }}>Dismiss</Button>
+            </div>
+          </div>
+        </>
+      )}
+      {pickerOpen && <ContactPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} excludeEmails={event.guestEmails || []} onPick={(pickedContacts) => { pickedContacts.forEach(c => onConfirm(c.id)); setPickerOpen(false); }} />}
+    </div>
+  );
+}
+
+function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
+  const { state } = useApp();
+  const [search, setSearch] = useState('');
+  const [filterLabel, setFilterLabel] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  useEffect(() => {
+    if (open) {
+      setSearch('');
+      setFilterLabel(null);
+      setSelectedIds(new Set());
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const excluded = new Set((excludeEmails || []).map(e => e.toLowerCase()));
+  const eligible = state.contacts.filter(c => {
+    const syntheticEmail = `${c.id}@contact.local`.toLowerCase();
+    const hasEmail = c.email && excluded.has(c.email.toLowerCase());
+    const hasSynthetic = excluded.has(syntheticEmail);
+    return !hasEmail && !hasSynthetic;
+  });
+
+  const labelCounts = {};
+  eligible.forEach((c) => {
+    c.googleLabels.filter((l) => !l.startsWith('CRM:')).forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
+    c.crmLabels.forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
+  });
+  const allLabelsList = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
+
+  const visible = eligible.filter((c) => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterLabel) {
+      const has = c.googleLabels.includes(filterLabel) || c.crmLabels.includes(filterLabel);
+      if (!has) return false;
+    }
+    return true;
+  }).sort((a, b) => importanceScore(b) - importanceScore(a));
+
+  const toggleSelect = (id) => {
+    setSelectedIds(s => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Select Contacts" size="lg">
+      <div className="p-6 space-y-4">
+        <div className="flex gap-3 items-end flex-wrap">
+          <label className="flex-1 min-w-[200px]">
+            <span className="text-xs text-warm-600">Search</span>
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search contacts…" autoFocus
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
+          </label>
         </div>
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search any contact"
-          className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-warm-50 text-sm mb-2" />
-        <div className="max-h-64 overflow-y-auto space-y-1">
-          {suggestions.length === 0 && <div className="text-xs text-warm-500 italic p-2">No matches</div>}
-          {suggestions.map((c) => (
-            <button key={c.id} onClick={() => { onConfirm(c.id); setOpen(false); }}
-              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-warm-100 text-left">
-              <Avatar contact={c} size={28} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
-                <div className="text-xs text-warm-600 truncate">{c.location?.city}{c.custom?.company ? ` · ${c.custom.company}` : ''}</div>
-              </div>
+
+        {allLabelsList.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
+            <button onClick={() => setFilterLabel(null)}
+              className={`text-xs px-2 py-1 rounded-full transition ${filterLabel == null ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+              All
             </button>
-          ))}
+            {allLabelsList.map((l) => (
+              <button key={l} onClick={() => setFilterLabel(filterLabel === l ? null : l)}
+                className={`text-xs px-2 py-1 rounded-full transition ${filterLabel === l ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
+                {l.replace(/^CRM:\s*/, '')} <span className="opacity-60">· {labelCounts[l]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-xs text-warm-600">
+          <span>{visible.length} matching ({selectedIds.size} selected)</span>
         </div>
-        <div className="pt-2 mt-2 border-t border-warm-200 flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => { onDismiss(); setOpen(false); }}>Dismiss</Button>
+
+        <div className="max-h-[40vh] overflow-y-auto border border-warm-200 rounded-lg divide-y divide-warm-100 bg-surface">
+          {visible.length === 0 && <div className="p-4 text-sm text-warm-600 italic">No contacts match.</div>}
+          {visible.map((c) => {
+            const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
+            const isSelected = selectedIds.has(c.id);
+            return (
+              <div key={c.id} onClick={() => toggleSelect(c.id)}
+                className={`w-full flex items-center gap-3 p-3 text-left transition hover:bg-warm-50 cursor-pointer ${isSelected ? 'bg-sage-50/80 border-l-4 border-sage-500' : ''}`}>
+                <input type="checkbox" checked={isSelected} readOnly className="rounded text-sage-600 focus:ring-sage-500" />
+                <Avatar contact={c} size={36} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
+                  <div className="text-xs text-warm-600 truncate">
+                    {googleLabels.slice(0, 4).join(', ')}
+                    {c.location?.city && `${googleLabels.length ? ' · ' : ''}${c.location.city}`}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-warm-200">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => { onPick(Array.from(selectedIds).map(id => state.contacts.find(c => c.id === id)).filter(Boolean)); onClose(); }} disabled={selectedIds.size === 0}>Done</Button>
         </div>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+function AddManualEventModal({ open, onClose }) {
+  const { state, addManualEvent } = useApp();
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [search, setSearch] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState(new Set());
+
+  useEffect(() => {
+    if (open) {
+      setTitle('');
+      setDate(new Date().toISOString().slice(0, 10));
+      setSearch('');
+      setSelectedContactIds(new Set());
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const q = search.toLowerCase();
+  const suggestions = state.contacts
+    .filter(c => !selectedContactIds.has(c.id))
+    .filter(c => c.name.toLowerCase().includes(q))
+    .sort((a, b) => importanceScore(b) - importanceScore(a))
+    .slice(0, 5);
+
+  const toggleContact = (id) => {
+    setSelectedContactIds(s => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const submit = () => {
+    if (title.trim() && date) {
+      addManualEvent(title.trim(), date, Array.from(selectedContactIds));
+      onClose();
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add Past Event" size="md">
+      <div className="p-6 space-y-4">
+        <div>
+          <label className="text-sm font-medium text-warm-900">Title</label>
+          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder="e.g. Dinner with Alice" />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-warm-900">Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-warm-900">Attendees</label>
+          {selectedContactIds.size > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2 mb-3">
+              {Array.from(selectedContactIds).map(id => {
+                const c = state.contacts.find(x => x.id === id);
+                if (!c) return null;
+                return (
+                  <div key={id} className="flex items-center gap-1.5 px-2 py-1 bg-warm-100 rounded-full border border-warm-200">
+                    <Avatar contact={c} size={20} />
+                    <span className="text-xs font-medium text-warm-900">{c.name}</span>
+                    <button onClick={() => toggleContact(id)} className="text-warm-500 hover:text-warm-900 leading-none">×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <input value={search} onChange={(e) => setSearch(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm" placeholder="Search to add attendees..." />
+          {search && (
+            <div className="mt-1 border border-warm-200 rounded-lg divide-y divide-warm-100 bg-surface shadow-sm max-h-40 overflow-y-auto">
+              {suggestions.length === 0 && <div className="p-2 text-xs text-warm-500 italic">No matches</div>}
+              {suggestions.map((c) => (
+                <button key={c.id} onClick={() => { toggleContact(c.id); setSearch(''); }} className="w-full flex items-center gap-2 p-2 hover:bg-warm-50 text-left">
+                  <Avatar contact={c} size={24} />
+                  <span className="text-sm text-warm-900">{c.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 pt-4 border-t border-warm-200">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={!title.trim() || !date}>Add Event</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -1463,7 +1814,7 @@ async function callLLM(llm, messages, ollamaOpts = {}) {
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         let detail = body;
-        try { detail = JSON.parse(body)?.error?.message || body; } catch {}
+        try { detail = JSON.parse(body)?.error?.message || body; } catch { }
         const friendly = res.status === 429
           ? 'Rate limit hit — wait a moment and try again'
           : res.status === 403
@@ -2027,8 +2378,8 @@ function SettingsTab() {
               <button type="button" onClick={() => setShowApiKey((v) => !v)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-700 p-1">
                 {showApiKey
-                  ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                  : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 }
               </button>
             </div>
@@ -2068,13 +2419,41 @@ function SettingsTab() {
         <p className="text-xs text-warm-500">Settings are stored locally in your browser and sent only to the provider you configure.</p>
       </Card>
 
-      {/* Calendar */}
-      <Card className="p-6 space-y-3">
-        <h3 className="font-serif text-lg text-warm-900">Calendar</h3>
-        <label className="flex items-center gap-3">
-          <input type="checkbox" checked={state.calendarWriteEnabled} onChange={(e) => setState((s) => ({ ...s, calendarWriteEnabled: e.target.checked }))} />
-          <span className="text-sm">Write logged interactions to Google Calendar (dedicated <strong>Personal CRM</strong> calendar, no guest invites).</span>
-        </label>
+      <Card className="p-6 space-y-4">
+        <h3 className="font-serif text-lg text-warm-900">Calendar Keyword Blacklist</h3>
+        <p className="text-sm text-warm-700">
+          Events with these key words in the title won't be pulled in from your calendars when you sync them to Tether — use this to stop pulling in irrelevant events like work or school so you can focus on intentional meetups.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {(state.calendarKeywordBlacklist || []).map((kw, i) => (
+            <div key={i} className="flex items-center gap-1.5 px-3 py-1 bg-warm-100 text-warm-900 text-sm rounded-full border border-warm-200">
+              <span>{kw}</span>
+              <button onClick={() => setState(s => ({ ...s, calendarKeywordBlacklist: s.calendarKeywordBlacklist.filter((_, idx) => idx !== i) }))} className="text-warm-500 hover:text-warm-900 ml-1 leading-none">&times;</button>
+            </div>
+          ))}
+          {(state.calendarKeywordBlacklist || []).length === 0 && <span className="text-sm text-warm-500 italic">No keywords blacklisted.</span>}
+        </div>
+        <div className="flex gap-2">
+          <input
+            id="newKeywordInput"
+            className="flex-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm"
+            placeholder="Add keyword..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.value.trim()) {
+                const val = e.target.value.trim();
+                setState(s => ({ ...s, calendarKeywordBlacklist: [...(s.calendarKeywordBlacklist || []), val] }));
+                e.target.value = '';
+              }
+            }}
+          />
+          <Button size="sm" onClick={() => {
+            const input = document.getElementById('newKeywordInput');
+            if (input && input.value.trim()) {
+              setState(s => ({ ...s, calendarKeywordBlacklist: [...(s.calendarKeywordBlacklist || []), input.value.trim()] }));
+              input.value = '';
+            }
+          }}>Add</Button>
+        </div>
       </Card>
 
       {/* Transparency Portal */}
@@ -2091,7 +2470,6 @@ function SettingsTab() {
               settings: {
                 theme: state.theme,
                 llm: state.llm,
-                calendarWriteEnabled: state.calendarWriteEnabled,
                 walkthroughDone: state.walkthroughDone,
               },
               nudges: state.nudges,

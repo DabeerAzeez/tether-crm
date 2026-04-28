@@ -13,7 +13,6 @@ const defaultState = () => ({
   theme: 'light', // light | dark
   activeTab: 'contacts',
   llm: { provider: 'ollama', apiKey: '', endpoint: 'http://localhost:11434', model: '', connected: false },
-  calendarWriteEnabled: false,
   nudges: {
     defaultCloseFriendDays: 30,
     groupCadence: {}, // key -> days
@@ -26,6 +25,9 @@ const defaultState = () => ({
   isImporting: false,
   chatThreads: [],     // persisted to Drive — array of { id, name, createdAt, updatedAt, messages }
   activeThreadId: null, // currently selected thread in Ask tab
+  resolvedEventIds: [],        // event IDs the user has explicitly resolved
+  dismissedEventIds: [],       // event IDs dismissed (hidden) from the pending inbox
+  calendarKeywordBlacklist: [], // keyword strings; events whose titles match are ignored
 });
 
 const loadState = () => {

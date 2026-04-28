@@ -18,7 +18,8 @@ function getUnresolvedHints(event, contacts, dismissed) {
   const hits = [];
   const alreadyEmails = new Set(event.guestEmails.map((e) => e.toLowerCase()));
   contacts.forEach((c) => {
-    if (c.email && alreadyEmails.has(c.email.toLowerCase())) return;
+    const syntheticEmail = `${c.id}@contact.local`.toLowerCase();
+    if (alreadyEmails.has(syntheticEmail) || (c.email && alreadyEmails.has(c.email.toLowerCase()))) return;
     const first = c.name.split(/\s+/)[0];
     if (first.length < 3) return;
     const re = new RegExp(`\\b${first}\\b`, 'i');
