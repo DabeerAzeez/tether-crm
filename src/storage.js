@@ -24,6 +24,8 @@ const defaultState = () => ({
   onboardingMappings: {}, // googleLabel -> crmKey
   selectedCloseFriendIds: [],
   isImporting: false,
+  chatThreads: [],     // persisted to Drive — array of { id, name, createdAt, updatedAt, messages }
+  activeThreadId: null, // currently selected thread in Ask tab
 });
 
 const loadState = () => {

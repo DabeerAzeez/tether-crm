@@ -41,7 +41,7 @@ const Icon = ({ d, className = 'w-5 h-5', stroke = 'currentColor', fill = 'none'
 );
 const Icons = {
   reconnect: <Icon d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5" />,
-  ask: <Icon d="M7 8h10M7 12h6M21 12a9 9 0 1 1-3.5-7.1L21 3v5h-5" />,
+  ask: <Icon d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   map: <Icon d={<><path d="M9 20l-6-2V6l6 2m0 12l6-2m-6 2V8m6 10l6 2V8l-6-2m0 12V6" /></>} />,
   calendar: <Icon d={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>} />,
   contacts: <Icon d={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>} />,

@@ -151,4 +151,55 @@ describe('TetherHelpers', () => {
       expect(helpers.importanceScore(contact)).toBe(26);
     });
   });
+
+  describe('generateThreadName', () => {
+    it('returns "New chat" for empty/null input', () => {
+      expect(helpers.generateThreadName('')).toBe('New chat');
+      expect(helpers.generateThreadName(null)).toBe('New chat');
+      expect(helpers.generateThreadName(undefined)).toBe('New chat');
+    });
+
+    it('returns the full message if 30 chars or fewer', () => {
+      expect(helpers.generateThreadName('Who is in Berlin?')).toBe('Who is in Berlin?');
+    });
+
+    it('truncates at word boundary for long messages', () => {
+      const long = 'Who do I know in Berlin that works in technology and startups?';
+      const result = helpers.generateThreadName(long);
+      expect(result.length).toBeLessThanOrEqual(31); // 30 + ellipsis char
+      expect(result.endsWith('…')).toBe(true);
+    });
+
+    it('collapses whitespace', () => {
+      expect(helpers.generateThreadName('  hello   world  ')).toBe('hello world');
+    });
+  });
+
+  describe('trimMessages', () => {
+    it('returns empty array for non-array input', () => {
+      expect(helpers.trimMessages(null, 5)).toEqual([]);
+      expect(helpers.trimMessages(undefined, 5)).toEqual([]);
+      expect(helpers.trimMessages('not array', 5)).toEqual([]);
+    });
+
+    it('returns full array when under max', () => {
+      const msgs = [{ text: 'a' }, { text: 'b' }];
+      expect(helpers.trimMessages(msgs, 5)).toEqual(msgs);
+    });
+
+    it('returns full array when exactly at max', () => {
+      const msgs = [{ text: 'a' }, { text: 'b' }, { text: 'c' }];
+      expect(helpers.trimMessages(msgs, 3)).toEqual(msgs);
+    });
+
+    it('keeps only the last N messages', () => {
+      const msgs = [{ text: 'a' }, { text: 'b' }, { text: 'c' }, { text: 'd' }];
+      expect(helpers.trimMessages(msgs, 2)).toEqual([{ text: 'c' }, { text: 'd' }]);
+    });
+
+    it('returns all messages when max is null', () => {
+      const msgs = [{ text: 'a' }, { text: 'b' }];
+      expect(helpers.trimMessages(msgs, null)).toEqual(msgs);
+    });
+  });
 });

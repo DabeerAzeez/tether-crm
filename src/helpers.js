@@ -81,6 +81,26 @@
     return s;
   }
 
+  // Auto-generate a thread name from the first user message.
+  function generateThreadName(firstMessage) {
+    if (!firstMessage) return 'New chat';
+    var cleaned = firstMessage.replace(/\s+/g, ' ').trim();
+    if (cleaned.length <= 30) return cleaned;
+    // Try to break at word boundary
+    var truncated = cleaned.slice(0, 30);
+    var lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > 15) truncated = truncated.slice(0, lastSpace);
+    return truncated + '…';
+  }
+
+  // Keep only the last `max` messages for Drive persistence.
+  function trimMessages(messages, max) {
+    if (!Array.isArray(messages)) return [];
+    if (max == null || max < 1) return messages;
+    if (messages.length <= max) return messages;
+    return messages.slice(messages.length - max);
+  }
+
   return {
     MULTI_COLOR,
     DEFAULT_LABEL_COLOR,
@@ -92,5 +112,7 @@
     labelsFor,
     colorFor,
     importanceScore,
+    generateThreadName,
+    trimMessages,
   };
 }));

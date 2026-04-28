@@ -8,7 +8,10 @@ const { loadState, saveState, defaultState } = window.TetherStorage;
 const { loadClientId } = window.TetherConstants;
 
 // Helper re-imports from TetherHelpers (loaded via helpers.js)
-const { daysSince, uid, labelsFor } = window.TetherHelpers;
+const { daysSince, uid, labelsFor, generateThreadName, trimMessages } = window.TetherHelpers;
+
+const MAX_THREADS = 3;
+const MAX_PERSISTED_MESSAGES = 15;
 
 // ───────────────────────────────────────────────────────────────────
 // App context
@@ -31,11 +34,26 @@ function AppProvider({ children }) {
     });
   }, []);
 
-  // Persist the full contacts list to Drive appDataFolder (fire-and-forget, non-blocking)
-  const saveContactsToDrive = useCallback((contacts, demoMode) => {
-    if (demoMode) return;
+  // Persist the full app data to Drive appDataFolder (fire-and-forget, non-blocking)
+  const saveToDrive = useCallback((state) => {
+    if (state.demoMode) return;
     if (!window.TetherGoogle || !window.TetherGoogle.hasToken()) return;
-    window.TetherGoogle.saveContacts(contacts).catch((e) => {
+    // Trim chat threads for persistence (max 15 messages each)
+    const chatThreads = (state.chatThreads || []).map((t) => ({
+      ...t,
+      messages: trimMessages(t.messages, MAX_PERSISTED_MESSAGES),
+    }));
+    window.TetherGoogle.saveAppData({
+      contacts: state.contacts,
+      chatThreads,
+      settings: {
+        theme: state.theme,
+        llm: state.llm,
+        calendarWriteEnabled: state.calendarWriteEnabled,
+        walkthroughDone: state.walkthroughDone,
+      },
+      nudges: state.nudges,
+    }).catch((e) => {
       console.error('[Tether] Drive save failed:', e);
     });
   }, []);
@@ -54,38 +72,38 @@ function AppProvider({ children }) {
   const updateContact = useCallback((id, patch) => {
     setState((s) => {
       const contacts = s.contacts.map((c) => (c.id === id ? { ...c, ...patch } : c));
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
       return { ...s, contacts };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const deleteContactPermanently = useCallback((id) => {
     setState((s) => {
       const contacts = s.contacts.filter((c) => c.id !== id);
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
       return { ...s, contacts };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const addCrmLabelToContact = useCallback((id, label) => {
     setState((s) => {
       const contacts = s.contacts.map((c) => c.id === id
         ? { ...c, crmLabels: c.crmLabels.includes(label) ? c.crmLabels : [...c.crmLabels, label] }
         : c);
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
       return { ...s, contacts };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const removeCrmLabelFromContact = useCallback((id, label) => {
     setState((s) => {
       const contacts = s.contacts.map((c) => c.id === id
         ? { ...c, crmLabels: c.crmLabels.filter((l) => l !== label) }
         : c);
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
       return { ...s, contacts };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const logInteraction = useCallback((contactId, { date, type, note, location }) => {
     const iso = date || new Date().toISOString();
@@ -109,10 +127,10 @@ function AppProvider({ children }) {
         guestEmails: contact?.email ? [contact.email] : [],
         synthetic: true,
       };
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
       return { ...s, contacts, events: [syntheticEvent, ...s.events] };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const logInteractionMany = useCallback((contactIds, data) => {
     contactIds.forEach((id) => logInteraction(id, data));
@@ -194,10 +212,10 @@ function AppProvider({ children }) {
       const dismissedAttendeeIds = dismissKey && !s.dismissedAttendeeIds.includes(dismissKey)
         ? [...s.dismissedAttendeeIds, dismissKey]
         : s.dismissedAttendeeIds;
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, events, contacts, dismissedAttendeeIds }), 0);
       return { ...s, events, contacts, dismissedAttendeeIds };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const dismissAttendee = useCallback((eventId, name) => {
     setState((s) => ({
@@ -245,10 +263,10 @@ function AppProvider({ children }) {
         customLabels.push({ key: newKey, label: newFull, color: '#a98458' });
       }
 
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts, customLabels }), 0);
       return { ...s, contacts, customLabels };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const deleteLabel = useCallback((label, deleteContactsToo) => {
     setState((s) => {
@@ -275,10 +293,10 @@ function AppProvider({ children }) {
 
       const customLabels = (s.customLabels || []).filter((c) => norm(c.label) !== targetNorm);
 
-      if (!s.demoMode) setTimeout(() => saveContactsToDrive(contacts, s.demoMode), 0);
+      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts, customLabels }), 0);
       return { ...s, contacts, customLabels };
     });
-  }, [setState, saveContactsToDrive]);
+  }, [setState, saveToDrive]);
 
   const setTheme = useCallback((theme) => {
     setState((s) => ({ ...s, theme }));
@@ -289,6 +307,66 @@ function AppProvider({ children }) {
     document.documentElement.classList.toggle('dark', state.theme === 'dark');
   }, [state.theme]);
 
+  // ── Chat thread ops
+  const createThread = useCallback((name) => {
+    let newId = null;
+    setState((s) => {
+      const threads = s.chatThreads || [];
+      if (threads.length >= MAX_THREADS) return s;
+      const now = new Date().toISOString();
+      newId = 't_' + uid();
+      const thread = { id: newId, name: name || 'New chat', createdAt: now, updatedAt: now, messages: [] };
+      const updated = { ...s, chatThreads: [...threads, thread], activeThreadId: newId };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+    return newId;
+  }, [setState, saveToDrive]);
+
+  const deleteThread = useCallback((threadId) => {
+    setState((s) => {
+      const threads = (s.chatThreads || []).filter((t) => t.id !== threadId);
+      const activeThreadId = s.activeThreadId === threadId
+        ? (threads.length > 0 ? threads[threads.length - 1].id : null)
+        : s.activeThreadId;
+      const updated = { ...s, chatThreads: threads, activeThreadId };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+  }, [setState, saveToDrive]);
+
+  const renameThread = useCallback((threadId, name) => {
+    setState((s) => {
+      const threads = (s.chatThreads || []).map((t) =>
+        t.id === threadId ? { ...t, name, updatedAt: new Date().toISOString() } : t
+      );
+      const updated = { ...s, chatThreads: threads };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+  }, [setState, saveToDrive]);
+
+  const appendMessage = useCallback((threadId, message) => {
+    setState((s) => {
+      const threads = (s.chatThreads || []).map((t) => {
+        if (t.id !== threadId) return t;
+        const msgs = [...t.messages, message];
+        // Auto-name thread from first user message
+        const name = t.messages.length === 0 && message.role === 'user'
+          ? generateThreadName(message.text)
+          : t.name;
+        return { ...t, messages: msgs, name, updatedAt: new Date().toISOString() };
+      });
+      const updated = { ...s, chatThreads: threads };
+      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
+      return updated;
+    });
+  }, [setState, saveToDrive]);
+
+  const setActiveThread = useCallback((threadId) => {
+    setState((s) => ({ ...s, activeThreadId: threadId }));
+  }, [setState]);
+
   const value = {
     state, setState,
     updateContact, deleteContactPermanently, addCrmLabelToContact, removeCrmLabelFromContact,
@@ -297,6 +375,8 @@ function AppProvider({ children }) {
     addGuestToEvent, removeGuestFromEvent,
     addCustomLabel, renameLabel, deleteLabel, setTheme,
     allLabels,
+    createThread, deleteThread, renameThread, appendMessage, setActiveThread,
+    MAX_THREADS,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

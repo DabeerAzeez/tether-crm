@@ -137,6 +137,7 @@ function SyncProgress() {
         setErr('');
 
         let contacts, events;
+        let chatThreads = [];
 
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
@@ -162,6 +163,7 @@ function SyncProgress() {
           // Refresh events too
           const syncRes = await window.TetherGoogle.loadFromDrive(() => { });
           events = syncRes.events;
+          chatThreads = syncRes.chatThreads || [];
         } else {
           // Regular load from Drive
           const result = await window.TetherGoogle.loadFromDrive(({ label, pct }) => {
@@ -170,6 +172,7 @@ function SyncProgress() {
           });
           contacts = result.contacts;
           events = result.events;
+          chatThreads = result.chatThreads || [];
         }
 
         // Geocode any contacts missing coordinates
@@ -200,6 +203,8 @@ function SyncProgress() {
           ...s,
           contacts,
           events,
+          chatThreads: chatThreads.length > 0 ? chatThreads : (s.chatThreads || []),
+          activeThreadId: chatThreads.length > 0 ? chatThreads[chatThreads.length - 1].id : s.activeThreadId,
           isImporting: false,
           lastSyncAt: new Date().toISOString(),
           phase: 'dashboard',

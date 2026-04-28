@@ -1569,19 +1569,35 @@ function BotMessage({ text, contacts, allContacts, openDrawer }) {
 // ───────────────────────────────────────────────────────────────────
 
 function AskTab() {
-  const { state, setState } = useApp();
+  const { state, setState, appendMessage, createThread } = useApp();
   const { open: openDrawer } = useDrawer();
-  const [messages, setMessages] = useState([
-    { role: 'bot', text: `Hi ${state.googleProfile?.name?.split(' ')[0] || 'there'} — ask me anything about your network. Try: "Who do I know in Berlin?" or "Which friends work in tech?"` },
-  ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const llm = state.llm;
   const endRef = useRef(null);
 
+  // Find the active thread (or null)
+  const activeThread = useMemo(() => {
+    const threads = state.chatThreads || [];
+    if (state.activeThreadId) {
+      const found = threads.find((t) => t.id === state.activeThreadId);
+      if (found) return found;
+    }
+    return threads.length > 0 ? threads[threads.length - 1] : null;
+  }, [state.chatThreads, state.activeThreadId]);
+
+  // Build display messages: welcome + thread messages
+  const welcomeText = `Hi ${state.googleProfile?.name?.split(' ')[0] || 'there'} — ask me anything about your network. Try: "Who do I know in Berlin?" or "Which friends work in tech?"`;
+
+  const displayMessages = useMemo(() => {
+    const welcome = { role: 'bot', text: welcomeText };
+    if (!activeThread || activeThread.messages.length === 0) return [welcome];
+    return [welcome, ...activeThread.messages];
+  }, [activeThread, welcomeText]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [displayMessages, loading]);
 
   const queryLLM = async (question, history) => {
     const contactsSummary = state.contacts.slice(0, 200).map((c) => {
@@ -1607,11 +1623,23 @@ function AskTab() {
     if (!input.trim() || loading) return;
     const q = input.trim();
     setInput('');
-    const history = messages.slice(1).map((m) => ({
+
+    // Ensure we have an active thread (auto-create if none)
+    let threadId = activeThread?.id;
+    if (!threadId) {
+      threadId = createThread();
+    }
+    if (!threadId) return; // shouldn't happen
+
+    // Build history from thread's existing messages
+    const threadMsgs = activeThread ? activeThread.messages : [];
+    const history = threadMsgs.map((m) => ({
       role: m.role === 'bot' ? 'assistant' : 'user',
       content: m.text,
     }));
-    setMessages((ms) => [...ms, { role: 'user', text: q }]);
+
+    // Append user message
+    appendMessage(threadId, { role: 'user', text: q });
     setLoading(true);
     try {
       const responseText = await queryLLM(q, history);
@@ -1621,12 +1649,12 @@ function AskTab() {
         const contact = state.contacts.find((c) => c.name === match[1]);
         if (contact && !seen.has(contact.id)) { seen.add(contact.id); mentioned.push(contact); }
       }
-      setMessages((ms) => [...ms, { role: 'bot', text: responseText, contacts: mentioned }]);
+      appendMessage(threadId, { role: 'bot', text: responseText, contacts: mentioned });
     } catch (e) {
       const errMsg = e.name === 'AbortError'
         ? 'Request timed out. Check that your LLM is reachable and try again.'
         : e.message;
-      setMessages((ms) => [...ms, { role: 'bot', text: `Error: ${errMsg}` }]);
+      appendMessage(threadId, { role: 'bot', text: `Error: ${errMsg}` });
     } finally {
       setLoading(false);
     }
@@ -1664,7 +1692,7 @@ function AskTab() {
       ) : (
         <div className="flex-1 flex flex-col min-h-0 bg-warm-50/50 rounded-2xl border border-warm-200 overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map((m, i) => (
+            {displayMessages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] ${m.role === 'user' ? 'bubble-user' : 'bubble-bot'} px-4 py-3 text-sm leading-relaxed`}>
                   {m.role === 'user'
@@ -2053,16 +2081,27 @@ function SettingsTab() {
       <Card className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">Transparency Portal</h3>
         <p className="text-sm text-warm-700">
-          All your Tether data lives in a single hidden file (<code className="font-mono text-xs">tether_contacts_v1.json</code>) in your Google Drive's private <strong>appData</strong> folder — invisible in Drive UI, safe from accidental deletion.
+          All your Tether data lives in a single hidden file (<code className="font-mono text-xs">tether_data_v2.json</code>) in your Google Drive's private <strong>appData</strong> folder — invisible in Drive UI, safe from accidental deletion.
         </p>
         <div className="flex gap-2 flex-wrap">
           <Button variant="secondary" onClick={() => {
-            const data = { contacts: state.contacts, version: 1, exportedAt: new Date().toISOString() };
+            const data = {
+              contacts: state.contacts,
+              chatThreads: state.chatThreads || [],
+              settings: {
+                theme: state.theme,
+                llm: state.llm,
+                calendarWriteEnabled: state.calendarWriteEnabled,
+                walkthroughDone: state.walkthroughDone,
+              },
+              nudges: state.nudges,
+              exportedAt: new Date().toISOString()
+            };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'tether_contacts_v1.json';
+            a.download = 'tether_data.json';
             a.click();
             URL.revokeObjectURL(url);
           }}>Export all data</Button>

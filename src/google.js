@@ -4,12 +4,13 @@
      • People API + Google Calendar API + Google Drive API enabled
      • The current origin added to "Authorized JavaScript origins"
 
-   Storage model:
-     All contact data is persisted in a single JSON file in the user's hidden
+   Storage model (v2):
+     App data is persisted in a structured JSON file in the user's hidden
      Google Drive appDataFolder (invisible to the user, not deletable from Drive UI):
-       tether_contacts_v1.json
+       tether_data_v2.json   — { version:2, contacts, chatThreads, settings, nudges }
+     Legacy v1 file (tether_contacts_v1.json) is read on first load for migration.
      On first sign-in, contacts are seeded from Google People API (read-only).
-     All subsequent saves go only to the Drive file — People API is never written to.
+     All subsequent saves go only to the v2 Drive file — People API is never written to.
 */
 
 (function () {
@@ -24,15 +25,17 @@
     'openid', 'profile', 'email',
   ].join(' ');
   const TOKEN_STORAGE_KEY = 'tether-google-token';
-  const DRIVE_FILE_NAME = 'tether_contacts_v1.json';
+  const DRIVE_FILE_NAME_V1 = 'tether_contacts_v1.json';
+  const DRIVE_FILE_NAME = 'tether_data_v2.json';
 
   let tokenClient = null;
   let gapiReady = false;
   let currentClientId = null;
   let currentToken = null;
 
-  // Cache the Drive file ID so we don't re-query on every save
-  let _driveFileId = null;
+  // Cache the Drive file IDs so we don't re-query on every save
+  let _driveFileId = null;   // v2 file
+  let _driveFileIdV1 = null; // v1 legacy (for migration)
 
   const waitFor = (test, timeout = 15000) => new Promise((resolve, reject) => {
     const start = Date.now();
@@ -104,44 +107,71 @@
     return { Authorization: `Bearer ${currentToken.access_token}` };
   }
 
-  /** Find the tether file in appDataFolder. Returns file id or null. */
-  async function findAppDataFile() {
-    if (_driveFileId) return _driveFileId;
-
+  /** Find a named file in appDataFolder. Returns file id or null. */
+  async function findAppDataFileByName(fileName) {
     const r = await gapi.client.request({
       path: 'https://www.googleapis.com/drive/v3/files',
       method: 'GET',
       params: {
-        q: `name='${DRIVE_FILE_NAME}' and 'appDataFolder' in parents`,
+        q: `name='${fileName}' and 'appDataFolder' in parents`,
         spaces: 'appDataFolder',
         fields: 'files(id,name)',
         pageSize: 1,
       },
     });
-
     const files = r.result.files || [];
-    if (files.length > 0) {
-      _driveFileId = files[0].id;
-      return _driveFileId;
-    }
-    return null;
+    return files.length > 0 ? files[0].id : null;
   }
 
-  /** Read tether_contacts_v1.json from appDataFolder. Returns parsed object or null. */
+  /** Find the v2 data file in appDataFolder (cached). */
+  async function findAppDataFile() {
+    if (_driveFileId) return _driveFileId;
+    _driveFileId = await findAppDataFileByName(DRIVE_FILE_NAME);
+    return _driveFileId;
+  }
+
+  /** Find the legacy v1 file (cached). */
+  async function findAppDataFileV1() {
+    if (_driveFileIdV1) return _driveFileIdV1;
+    _driveFileIdV1 = await findAppDataFileByName(DRIVE_FILE_NAME_V1);
+    return _driveFileIdV1;
+  }
+
+  /** Download a Drive file by ID. Returns parsed JSON or null. */
+  async function downloadFile(fileId) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      console.error(`[Tether] Drive read failed: ${res.status}`);
+      return null;
+    }
+    return await res.json();
+  }
+
+  /**
+   * Read app data from Drive appDataFolder.
+   * Tries v2 first; falls back to v1 for migration. Returns parsed object or null.
+   * The returned object always has a `version` field.
+   */
   async function readAppData() {
     try {
-      const fileId = await findAppDataFile();
-      if (!fileId) return null;
-
-      // Use fetch for media download — gapi.client.request doesn't handle alt=media well
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: authHeaders(),
-      });
-      if (!res.ok) {
-        console.error(`[Tether] Drive read failed: ${res.status}`);
-        return null;
+      // Try v2 file first
+      const v2Id = await findAppDataFile();
+      if (v2Id) {
+        const data = await downloadFile(v2Id);
+        if (data) return data;
       }
-      return await res.json();
+      // Fall back to legacy v1
+      const v1Id = await findAppDataFileV1();
+      if (v1Id) {
+        const data = await downloadFile(v1Id);
+        if (data) {
+          console.log('[Tether] Found v1 data — will migrate to v2 on next save.');
+          return { ...data, version: 1 };
+        }
+      }
+      return null;
     } catch (e) {
       console.error('[Tether] readAppData error:', e);
       return null;
@@ -408,9 +438,9 @@
    * loadFromDrive: loads app state from Drive appDataFolder + Google Calendar.
    *
    * Strategy:
-   *   1. Try to read tether_contacts_v1.json from appDataFolder.
-   *   2. If found → use stored contacts as source of truth.
-   *   3. If NOT found → return empty contacts. Do NOT auto-import Google Contacts.
+   *   1. Try to read tether_data_v2.json, falling back to tether_contacts_v1.json.
+   *   2. If found → use stored contacts (and chatThreads if v2) as source of truth.
+   *   3. If NOT found → return empty. Do NOT auto-import Google Contacts.
    *   4. Always fetch Calendar fresh for event cross-referencing.
    */
   async function loadFromDrive(onProgress) {
@@ -420,12 +450,13 @@
     const driveData = await readAppData();
 
     let contacts = [];
+    let chatThreads = [];
     if (driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0) {
       report('Loading contacts from Drive…', 60);
       contacts = driveData.contacts;
+      chatThreads = Array.isArray(driveData.chatThreads) ? driveData.chatThreads : [];
     } else {
       report('No existing data found — starting fresh…', 60);
-      // Blank state: user must manually trigger import
     }
 
     // Calendar is always fetched fresh
@@ -445,7 +476,10 @@
     }
 
     report('Done', 100);
-    return { contacts, events, hasExistingData: !!(driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0) };
+    return {
+      contacts, events, chatThreads,
+      hasExistingData: !!(driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0),
+    };
   }
 
   /**
@@ -467,7 +501,7 @@
 
     report('Saving to Drive…', 85);
     try {
-      await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
+      await saveAppData({ contacts });
     } catch (e) {
       console.error('[Tether] Failed to write Drive file after import:', e);
     }
@@ -482,11 +516,35 @@
   }
 
   /**
-   * saveContacts: persist the full contacts array to Drive appDataFolder.
-   * This is the ONLY write path — replaces all People API writes.
+   * saveAppData: persist the full structured payload to Drive appDataFolder (v2 format).
+   * This is the primary write path — replaces all People API writes.
+   */
+  async function saveAppData(payload) {
+    const data = {
+      version: 2,
+      savedAt: new Date().toISOString(),
+      contacts: payload.contacts || [],
+      chatThreads: payload.chatThreads || [],
+      settings: payload.settings || {},
+      nudges: payload.nudges || {},
+    };
+    await writeAppData(data);
+  }
+
+  /**
+   * saveContacts: convenience wrapper — reads current Drive data, merges contacts, writes back.
+   * Kept for backward compatibility.
    */
   async function saveContacts(contacts) {
-    await writeAppData({ contacts, version: 1, savedAt: new Date().toISOString() });
+    // Read existing data to preserve chatThreads / settings / nudges
+    let existing = null;
+    try { existing = await readAppData(); } catch (e) { /* proceed with contacts only */ }
+    await saveAppData({
+      contacts,
+      chatThreads: (existing && existing.chatThreads) || [],
+      settings: (existing && existing.settings) || {},
+      nudges: (existing && existing.nudges) || {},
+    });
   }
 
   // ─── Token management ─────────────────────────────────────────────
@@ -512,6 +570,7 @@
   function revoke() {
     return new Promise((resolve) => {
       _driveFileId = null;
+      _driveFileIdV1 = null;
       try { localStorage.removeItem(TOKEN_STORAGE_KEY); } catch (e) {}
       if (currentToken && currentToken.access_token && window.google?.accounts?.oauth2) {
         try {
@@ -536,6 +595,7 @@
     loadFromDrive,
     importContactsFromGoogle,
     saveContacts,
+    saveAppData,
     readAppData,
     writeAppData,
     tryRestoreToken,
