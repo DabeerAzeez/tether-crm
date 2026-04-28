@@ -7,7 +7,7 @@ Start the dev server and open the app in the browser to check for syntax errors 
 
 ## Product Requirements
 
-The full PRD is at `.ai/PRD.md`.
+The full PRD is at `.ai/PRD.md`. Detailed TODO items are in `.resources/TODO.md` (gitignored).
 
 ## Dev Server
 
@@ -38,11 +38,25 @@ npm run test:watch
 
 **TetherCRM** is a privacy-first personal CRM — a static single-page app with no backend.
 
-- **No npm / no build pipeline.** `index.html` loads React 18, Babel, Tailwind, Leaflet, and Google APIs from CDN.
-- **`src/app.jsx`** (~3,700 lines) contains everything: all React components, state management, business logic, and tab implementations. It is intentionally monolithic.
-- **`src/google.js`** is the Google API wrapper exposed as `window.TetherGoogle`. Handles OAuth tokens, People API, Calendar API, and Drive appDataFolder CRUD.
-- **`src/data.js`** contains mock seed data (35 contacts, 16 events) used in demo mode when no real Google credentials are available.
-- **`src/config.js`** holds the OAuth client ID.
+- **No npm / no build pipeline.** `index.html` loads React 18, Babel, Tailwind, Leaflet, and Google APIs from CDN. JSX is transpiled in-browser by Babel standalone; files are loaded sequentially via async IIFEs in `index.html`.
+
+### Source files (`src/`)
+
+| File | Purpose |
+|------|---------|
+| `app.jsx` | Root component, routing, `Dashboard` shell, `KeyListener` |
+| `context.jsx` | `AppCtx` React context and `AppProvider` — all state + mutations |
+| `components.jsx` | Reusable UI primitives: `Avatar`, `Button`, `Card`, `LabelMenu`, etc. |
+| `constants.jsx` | Icons (SVG), reserved category names, app-wide constants |
+| `drawer.jsx` | Contact detail side-panel and interaction logging modal |
+| `sidebar.jsx` | Navigation rail and unresolved attendee hints |
+| `onboarding.jsx` | Multi-step onboarding flow (`signin` → `syncing` → label mapping → close friends picker) |
+| `tabs.jsx` | All eight tab components (`AllContactsTab`, `ReconnectTab`, `AskTab`, etc.) |
+| `google.js` | Google API wrapper (`window.TetherGoogle`): OAuth, People API, Calendar API, Drive CRUD |
+| `storage.js` | `localStorage` persistence helpers and Nominatim geocoding |
+| `helpers.js` | Pure utility functions: date formatting, label management, contact scoring |
+| `data.js` | Mock seed data (35 contacts, 16 events) for demo mode |
+| `config.js` | Google OAuth client ID |
 
 ## Data & Storage
 

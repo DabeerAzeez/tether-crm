@@ -12,7 +12,7 @@ const defaultState = () => ({
   customLabels: [], // user-added CRM: labels
   theme: 'light', // light | dark
   activeTab: 'contacts',
-  llm: { provider: 'demo', apiKey: '', endpoint: '' },
+  llm: { provider: 'ollama', apiKey: '', endpoint: 'http://localhost:11434', model: '', connected: false },
   calendarWriteEnabled: false,
   nudges: {
     defaultCloseFriendDays: 30,

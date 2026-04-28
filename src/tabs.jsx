@@ -46,7 +46,7 @@ function ReconnectTab() {
     <div className="p-8 max-w-5xl mx-auto space-y-8">
       <div>
         <h1 className="font-serif text-3xl text-warm-900">Reconnect</h1>
-        <p className="text-warm-600 mt-1">Who needs a little warmth today.</p>
+        <p className="text-warm-600 mt-1">Catch up with your contacts.</p>
       </div>
 
       {state.contacts.length === 0 ? (
@@ -452,7 +452,7 @@ function ImportModal({ open, onClose }) {
 }
 
 function AllContactsTab() {
-  const { state, allLabels } = useApp();
+  const { state, setState, allLabels } = useApp();
   const { open: openDrawer } = useDrawer();
   const [sort, setSort] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
@@ -460,8 +460,70 @@ function AllContactsTab() {
   const [query, setQuery] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [editLabelsOpen, setEditLabelsOpen] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
+  const [aiResults, setAiResults] = useState(null);
+  const [aiReason, setAiReason] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
 
   const isTrashMode = state.activeTab === 'trash';
+
+  const exitAiMode = () => {
+    setAiMode(false);
+    setAiResults(null);
+    setAiReason('');
+    setQuery('');
+    setClearConfirm(false);
+  };
+
+  const searchWithAI = async () => {
+    if (!query.trim() || aiLoading) return;
+    setAiLoading(true);
+    setClearConfirm(false);
+    try {
+      const contactsList = state.contacts.filter((c) => !c.isDeleted).map((c) => {
+        const parts = [c.name];
+        if (c.location?.city) parts.push(`(${c.location.city})`);
+        const labels = [...(c.googleLabels || []), ...(c.crmLabels || [])].map((l) => l.replace(/^CRM:\s*/i, '')).join(', ');
+        if (labels) parts.push(`[${labels}]`);
+        if ((c.skills || []).length) parts.push(`skills: ${c.skills.join(', ')}`);
+        if (c.notes) parts.push(`notes: ${c.notes.slice(0, 80)}`);
+        return parts.join(' ');
+      }).join('\n');
+
+      const systemPrompt = `You are a personal CRM search assistant. The user has these contacts:\n\n${contactsList}\n\nRespond in EXACTLY this format and nothing else:\nREASON: <one sentence explaining what you found>\nMATCHES: <comma-separated exact contact names, or "none">`;
+
+      const text = await callLLM(state.llm, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: query },
+      ], { options: { num_predict: 200 } });
+
+      const reasonMatch = text.match(/REASON:\s*(.+?)(?=\nMATCHES:|$)/is);
+      const matchesMatch = text.match(/MATCHES:\s*(.+)$/is);
+      const reason = reasonMatch?.[1]?.trim() || 'AI search complete.';
+      const matchesRaw = matchesMatch?.[1]?.trim() || '';
+      const matchedNames = matchesRaw.toLowerCase() === 'none' ? [] : matchesRaw.split(',').map((n) => n.trim()).filter(Boolean);
+
+      const activeContacts = state.contacts.filter((c) => !c.isDeleted);
+      const matchedIds = activeContacts
+        .filter((c) => matchedNames.some((n) => {
+          const cn = c.name.toLowerCase();
+          const sn = n.toLowerCase();
+          return cn === sn || cn.includes(sn) || sn.includes(cn.split(' ')[0]);
+        }))
+        .map((c) => c.id);
+
+      setAiReason(reason);
+      setAiResults(matchedIds);
+      setAiMode(true);
+    } catch (e) {
+      setAiReason(`Search failed: ${e.message}`);
+      setAiResults([]);
+      setAiMode(true);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleSort = (key) => {
     if (sort === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
@@ -477,7 +539,9 @@ function AllContactsTab() {
     let r = isTrashMode
       ? state.contacts.filter(c => c.isDeleted)
       : state.contacts.filter(c => !c.isDeleted);
-    if (query) {
+    if (aiMode && aiResults !== null) {
+      r = r.filter((c) => aiResults.includes(c.id));
+    } else if (query) {
       const q = query.toLowerCase();
       r = r.filter((c) => c.name.toLowerCase().includes(q) ||
         (c.email || '').toLowerCase().includes(q) ||
@@ -528,7 +592,7 @@ function AllContactsTab() {
       return labA.localeCompare(labB) * dir;
     });
     return r;
-  }, [state.contacts, sort, sortDir, filter, query, allLabels]);
+  }, [state.contacts, sort, sortDir, filter, query, allLabels, aiMode, aiResults]);
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-4">
@@ -536,7 +600,7 @@ function AllContactsTab() {
         <div>
           <h1 className="font-serif text-3xl text-warm-900">{isTrashMode ? 'Trash' : 'All Contacts'}</h1>
           <p className="text-warm-600 mt-1">
-            {rows.length} contact{rows.length === 1 ? '' : 's'} {isTrashMode ? 'in trash' : 'from Google'} — sorted by {sort === 'importance' ? 'inferred importance' : sort}.
+            {rows.length} contact{rows.length === 1 ? '' : 's'} {isTrashMode ? 'in trash.' : 'in total.'}
             {isTrashMode && ' Items will be deleted permanently after 30 days.'}
           </p>
         </div>
@@ -560,14 +624,58 @@ function AllContactsTab() {
         </Card>
       ) : (
         <>
-          <div className="relative w-full">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, city, skill, note…"
-              className="pl-9 pr-3 py-2 rounded-lg border border-warm-300 bg-surface w-full"
-            />
+          <div className="space-y-1">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-500">{Icons.search}</span>
+                <input
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); if (aiMode) { setAiMode(false); setAiResults(null); } setClearConfirm(false); }}
+                  placeholder='Search name, city, skill, note, or ask a question with "AI Search" …'
+                  className={`pl-9 py-2 rounded-lg border bg-surface w-full transition-colors ${aiMode ? 'border-violet-400 pr-8' : 'border-warm-300 pr-3'}`}
+                />
+                {aiMode && (
+                  <button
+                    onClick={() => clearConfirm ? exitAiMode() : setClearConfirm(true)}
+                    title="Clear AI search"
+                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold transition-colors ${clearConfirm ? 'bg-red-500 text-white' : 'text-warm-400 hover:text-warm-700'}`}
+                  >×</button>
+                )}
+              </div>
+              {!isTrashMode && (
+                <button
+                  onClick={searchWithAI}
+                  disabled={!state.llm?.connected || !query.trim() || aiLoading}
+                  title={!state.llm?.connected ? 'Configure an AI model in Settings to use this feature' : undefined}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    aiMode
+                      ? 'bg-violet-600 hover:bg-violet-700 border-violet-600 text-white'
+                      : 'bg-surface border-warm-300 text-warm-700 hover:bg-warm-50'
+                  }`}
+                >
+                  {aiLoading
+                    ? <span className="flex items-center gap-2"><span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />Searching…</span>
+                    : '✦ AI Search'}
+                </button>
+              )}
+            </div>
+            {clearConfirm && (
+              <p className="text-xs text-amber-700 pl-1">
+                AI results will not be saved. <button onClick={exitAiMode} className="underline font-medium">Clear anyway</button> · <button onClick={() => setClearConfirm(false)} className="underline">Cancel</button>
+              </p>
+            )}
+            {aiLoading && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-200 text-sm text-violet-600">
+                <span className="inline-block w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                <span>Asking AI…</span>
+              </div>
+            )}
+            {aiMode && !aiLoading && !clearConfirm && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-200 text-sm text-violet-800">
+                <span className="mt-0.5 shrink-0">✦</span>
+                <span className="flex-1">{aiReason}</span>
+              </div>
+            )}
           </div>
 
           {allLabels.length > 0 && !isTrashMode && (
@@ -693,7 +801,34 @@ function AllContactsTab() {
                 })()}
               </tbody>
             </table>
-            {rows.length === 0 && <div className="p-12 text-center text-warm-500">No contacts found matching your criteria.</div>}
+            {rows.length === 0 && (
+              <div className="p-12 text-center text-warm-500 space-y-3">
+                {!aiMode && query ? (
+                  <>
+                    <p>No contacts found for <span className="text-warm-700 font-medium">"{query}"</span>.</p>
+                    {state.llm?.connected ? (
+                      <>
+                        <p className="text-sm">Try AI Search to match by meaning, not just text.</p>
+                        <button
+                          onClick={searchWithAI}
+                          disabled={aiLoading}
+                          className="mt-1 px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40"
+                        >
+                          {aiLoading ? 'Searching…' : '✦ Search with AI'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm">Connect an AI model to search by meaning, not just text.</p>
+                        <Button size="sm" variant="outline" onClick={() => setState((s) => ({ ...s, activeTab: 'settings' }))}>Configure in Settings</Button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <p>No contacts found matching your criteria.</p>
+                )}
+              </div>
+            )}
           </Card>
         </>
       )}
@@ -1294,123 +1429,210 @@ function MapTab() {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// ASK (chat) TAB
+// SHARED LLM HELPER
 // ───────────────────────────────────────────────────────────────────
 
-const CITY_HINTS = {
-  lisbon: { lat: 38.7223, lng: -9.1393, zoom: 6 },
-  portugal: { lat: 39.4, lng: -8, zoom: 6 },
-  berlin: { lat: 52.52, lng: 13.405, zoom: 6 },
-  london: { lat: 51.5074, lng: -0.1278, zoom: 6 },
-  paris: { lat: 48.8566, lng: 2.3522, zoom: 6 },
-  tokyo: { lat: 35.68, lng: 139.69, zoom: 5 },
-  kyoto: { lat: 35.01, lng: 135.77, zoom: 5 },
-  japan: { lat: 36, lng: 138, zoom: 5 },
-  'southeast asia': { lat: 10, lng: 110, zoom: 4 },
-  asia: { lat: 20, lng: 100, zoom: 3 },
-  europe: { lat: 50, lng: 10, zoom: 4 },
-  africa: { lat: 0, lng: 20, zoom: 3 },
-  'new york': { lat: 40.7, lng: -74, zoom: 7 },
-  'san francisco': { lat: 37.77, lng: -122.42, zoom: 7 },
-  nyc: { lat: 40.7, lng: -74, zoom: 7 },
-  sf: { lat: 37.77, lng: -122.42, zoom: 7 },
-};
+async function callLLM(llm, messages, ollamaOpts = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    if (llm.provider === 'ollama' || llm.provider === 'other') {
+      const endpoint = (llm.endpoint || 'http://localhost:11434').replace(/\/$/, '');
+      const model = llm.model || 'llama3.2';
+      const res = await fetch(`${endpoint}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ model, messages, stream: false, think: false, ...ollamaOpts }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Ollama error ${res.status}${errText ? ': ' + errText.slice(0, 120) : ''}`);
+      }
+      const data = await res.json();
+      return data.message?.content || '';
+    }
+    if (llm.provider === 'gemini') {
+      const model = llm.model || 'gemini-2.0-flash';
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llm.apiKey}` },
+        signal: controller.signal,
+        body: JSON.stringify({ model, messages }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        let detail = body;
+        try { detail = JSON.parse(body)?.error?.message || body; } catch {}
+        const friendly = res.status === 429
+          ? 'Rate limit hit — wait a moment and try again'
+          : res.status === 403
+            ? 'API key rejected — check it in Settings'
+            : detail.slice(0, 150) || `HTTP ${res.status}`;
+        throw new Error(`Gemini: ${friendly}`);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+    throw new Error(`Provider "${llm.provider}" is not yet supported for chat.`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────
+// BOT MESSAGE — renders markdown with inline contact cards
+// ───────────────────────────────────────────────────────────────────
+
+function makeContactCard(c) {
+  const initials = c.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  const subtitle = [c.location?.city, c.custom?.title].filter(Boolean).join(' · ');
+  return `<button class="contact-card-btn" data-contact-id="${c.id}">` +
+    `<span class="contact-card-avatar">${initials}</span>` +
+    `<span class="contact-card-info"><span class="contact-card-name">${c.name}</span>` +
+    (subtitle ? `<span class="contact-card-sub">${subtitle}</span>` : '') +
+    `</span></button>`;
+}
+
+function buildBotHTML(text, allContacts) {
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const byName = {};
+  (allContacts || []).forEach((c) => { byName[c.name] = c; });
+
+  // First-name → contact map; null means ambiguous (multiple contacts share it)
+  const byFirst = {};
+  (allContacts || []).forEach((c) => {
+    const first = c.name.split(/\s+/)[0];
+    byFirst[first] = byFirst[first] === undefined ? c : null;
+  });
+
+  const placeholders = {};
+  let idx = 0;
+  const nextKey = () => { const k = `TETHERCONTACT${idx++}X`; return k; };
+  const captured = new Set();
+
+  const pin = (c) => {
+    if (captured.has(c.id)) return null; // already pinned, don't double-replace
+    captured.add(c.id);
+    const key = nextKey();
+    placeholders[key] = c;
+    return key;
+  };
+
+  // Pass 1 — explicit [[Name]] markers from the LLM
+  let processed = text.replace(/\[\[([^\]]+)\]\]/g, (full, name) => {
+    const c = byName[name];
+    if (!c) return name; // unknown name → render as plain text
+    const key = nextKey();
+    placeholders[key] = c;
+    captured.add(c.id);
+    return key;
+  });
+
+  // Pass 2 — exact full-name fallback for contacts the LLM forgot to bracket
+  for (const c of (allContacts || [])) {
+    if (captured.has(c.id)) continue;
+    processed = processed.replace(new RegExp(`\\b${esc(c.name)}\\b`, 'g'), () => pin(c) || c.name);
+  }
+
+  // Pass 3 — unique first-name fallback (e.g. "Elo" → "Elo (Stockholm Hostel)")
+  for (const [first, c] of Object.entries(byFirst)) {
+    if (!c || captured.has(c.id)) continue;
+    processed = processed.replace(new RegExp(`\\b${esc(first)}\\b`, 'g'), () => pin(c) || first);
+  }
+
+  let html = marked.parse(processed);
+
+  for (const [key, c] of Object.entries(placeholders)) {
+    html = html.replace(key, makeContactCard(c));
+  }
+
+  return DOMPurify.sanitize(html, { ALLOW_DATA_ATTR: true });
+}
+
+function BotMessage({ text, contacts, allContacts, openDrawer }) {
+  const ref = useRef(null);
+  const html = useMemo(() => buildBotHTML(text, allContacts), [text, allContacts]);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const btns = ref.current.querySelectorAll('.contact-card-btn');
+    btns.forEach((btn) => { btn.onclick = () => openDrawer(btn.dataset.contactId); });
+    return () => btns.forEach((btn) => { btn.onclick = null; });
+  }, [html, openDrawer]);
+
+  return <div ref={ref} className="chat-md" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// ASK (chat) TAB
+// ───────────────────────────────────────────────────────────────────
 
 function AskTab() {
   const { state, setState } = useApp();
   const { open: openDrawer } = useDrawer();
   const [messages, setMessages] = useState([
-    { role: 'bot', text: `Hi ${state.googleProfile?.name?.split(' ')[0] || 'there'} — ask me anything about your network. Try: "Who do I know in Berlin?" or "Which friends are into climbing?"` },
+    { role: 'bot', text: `Hi ${state.googleProfile?.name?.split(' ')[0] || 'there'} — ask me anything about your network. Try: "Who do I know in Berlin?" or "Which friends work in tech?"` },
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
   const llm = state.llm;
   const endRef = useRef(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, loading]);
 
-  const answer = (q) => {
-    const lc = q.toLowerCase();
-    // City / region detection
-    const hintKey = Object.keys(CITY_HINTS).find((k) => lc.includes(k));
-    const isLocationQ = /\b(in|near|around|visit|trip|travel|live|lives)\b/.test(lc) || hintKey;
+  const queryLLM = async (question, history) => {
+    const contactsSummary = state.contacts.slice(0, 200).map((c) => {
+      const parts = [`- ${c.name}`];
+      if (c.location?.city) parts.push(`(${c.location.city}${c.location.country ? ', ' + c.location.country : ''})`);
+      const labels = [...(c.googleLabels || []), ...(c.crmLabels || [])].map((l) => l.replace(/^CRM:\s*/i, '')).join(', ');
+      if (labels) parts.push(`[${labels}]`);
+      if ((c.skills || []).length) parts.push(`skills: ${c.skills.join(', ')}`);
+      return parts.join(' ');
+    }).join('\n');
 
-    // Skill detection
-    const skillWords = ['climb', 'mentor', 'product', 'design', 'surf', 'write', 'wine', 'coffee', 'machine learning', 'ml', 'security', 'invest', 'engineer', 'photograph', 'cook', 'book', 'hike'];
-    const matchedSkill = skillWords.find((w) => lc.includes(w));
+    const systemPrompt = `You are a helpful personal CRM assistant. The user has ${state.contacts.length} contacts:\n\n${contactsSummary}\n\nAnswer questions about the user's network concisely. When referring to a specific contact, wrap their EXACT name (as listed above) in double square brackets, e.g. [[Jane Smith]]. Use this for every contact you mention so the app can render interactive contact cards. Do not use this syntax for anyone not in the list.`;
 
-    // Mentor query
-    if (/mentor/.test(lc)) {
-      const topic = q.match(/mentor[ing]*\s+(me\s+)?(on|about|for)?\s*(.+?)(\?|$)/i)?.[3] || '';
-      const topicLc = topic.toLowerCase();
-      const candidates = state.contacts
-        .filter((c) => c.crmLabels.includes('CRM: Professional') || (c.skills || []).some((s) => topicLc && s.toLowerCase().includes(topicLc)))
-        .sort((a, b) => importanceScore(b) - importanceScore(a))
-        .slice(0, 6);
-      return { text: `Here are contacts who could mentor you${topic ? ` on ${topic}` : ''}:`, contacts: candidates };
-    }
-
-    // "Where do X live" or location
-    if (isLocationQ) {
-      const city = Object.keys(CITY_HINTS).find((k) => lc.includes(k));
-      const candidates = state.contacts.filter((c) => {
-        if (!c.location) return false;
-        const hay = `${c.location.city} ${c.location.country}`.toLowerCase();
-        return city ? hay.includes(city) : skillWords.some((s) => lc.includes(s) && (c.skills || []).join(' ').toLowerCase().includes(s));
-      }).slice(0, 10);
-
-      const hint = hintKey ? CITY_HINTS[hintKey] : null;
-
-      return {
-        text: candidates.length > 0
-          ? `Found ${candidates.length} contact${candidates.length === 1 ? '' : 's'}${city ? ` in or near ${city.charAt(0).toUpperCase() + city.slice(1)}` : ''}:`
-          : `I don't see any contacts there. Try another city or drop a pin on the Map.`,
-        contacts: candidates,
-        mapHint: hint,
-      };
-    }
-
-    // Skill
-    if (matchedSkill) {
-      const candidates = state.contacts.filter((c) => {
-        const hay = `${(c.skills || []).join(' ')} ${c.notes || ''} ${c.custom?.title || ''}`.toLowerCase();
-        return hay.includes(matchedSkill);
-      }).slice(0, 10);
-      return {
-        text: candidates.length
-          ? `Contacts related to "${matchedSkill}":`
-          : `No clear matches for "${matchedSkill}". Try adding it as a skill or to a contact's notes.`,
-        contacts: candidates,
-      };
-    }
-
-    // Fallback: name match
-    const byName = state.contacts.filter((c) => c.name.toLowerCase().includes(lc)).slice(0, 5);
-    if (byName.length > 0) {
-      return { text: `Matches by name:`, contacts: byName };
-    }
-
-    return { text: `I'm a simple rule-based demo matcher — I look for city names and skills. Try a question like "who do I know in Lisbon" or "which friends are into climbing." Add your own LLM key in Settings for real open-ended chat.` };
+    const text = await callLLM(llm, [
+      { role: 'system', content: systemPrompt },
+      ...history,
+      { role: 'user', content: question },
+    ]);
+    return text || 'No response from model.';
   };
 
-  const send = () => {
-    if (!input.trim()) return;
+  const send = async () => {
+    if (!input.trim() || loading) return;
     const q = input.trim();
     setInput('');
+    const history = messages.slice(1).map((m) => ({
+      role: m.role === 'bot' ? 'assistant' : 'user',
+      content: m.text,
+    }));
     setMessages((ms) => [...ms, { role: 'user', text: q }]);
-    setTimeout(() => {
-      const res = answer(q);
-      setMessages((ms) => [...ms, { role: 'bot', ...res }]);
-      if (res.mapHint) {
-        // Store for map tab
-        setState((s) => ({ ...s, mapFocus: res.mapHint }));
+    setLoading(true);
+    try {
+      const responseText = await queryLLM(q, history);
+      const seen = new Set();
+      const mentioned = [];
+      for (const match of responseText.matchAll(/\[\[([^\]]+)\]\]/g)) {
+        const contact = state.contacts.find((c) => c.name === match[1]);
+        if (contact && !seen.has(contact.id)) { seen.add(contact.id); mentioned.push(contact); }
       }
-    }, 350);
+      setMessages((ms) => [...ms, { role: 'bot', text: responseText, contacts: mentioned }]);
+    } catch (e) {
+      const errMsg = e.name === 'AbortError'
+        ? 'Request timed out. Check that your LLM is reachable and try again.'
+        : e.message;
+      setMessages((ms) => [...ms, { role: 'bot', text: `Error: ${errMsg}` }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // If no LLM provider config AND user wants "real" mode, show setup prompt
-  const showSetup = llm.provider !== 'demo' && !llm.apiKey && !llm.endpoint;
+  const showSetup = !llm.connected;
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
@@ -1434,8 +1656,8 @@ function AskTab() {
       ) : showSetup ? (
         <div className="flex-1 flex items-center justify-center">
           <Card className="max-w-md w-full p-8 text-center">
-            <h2 className="font-serif text-2xl text-warm-900 mb-2">Add an API key to enable chat</h2>
-            <p className="text-warm-700 mb-6">Paste your OpenAI/Anthropic key in Settings → LLM config — or switch to the built-in Demo matcher.</p>
+            <h2 className="font-serif text-2xl text-warm-900 mb-2">Connect Ollama to start chatting</h2>
+            <p className="text-warm-700 mb-6">Configure your Ollama endpoint in Settings and hit <strong>Test &amp; Save</strong> to verify the connection.</p>
             <Button onClick={() => setState((s) => ({ ...s, activeTab: 'settings' }))}>Open Settings</Button>
           </Card>
         </div>
@@ -1445,39 +1667,31 @@ function AskTab() {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] ${m.role === 'user' ? 'bubble-user' : 'bubble-bot'} px-4 py-3 text-sm leading-relaxed`}>
-                  <p>{m.text}</p>
-                  {m.contacts && m.contacts.length > 0 && (
-                    <div className="mt-3 grid grid-cols-1 gap-1.5">
-                      {m.contacts.map((c) => (
-                        <button key={c.id} onClick={() => openDrawer(c.id)}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-surface/60 hover:bg-surface text-warm-900 text-left">
-                          <Avatar contact={c} size={28} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{c.name}</div>
-                            <div className="text-xs opacity-70 truncate">{c.location?.city}{c.custom?.title ? ` · ${c.custom.title}` : ''}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {m.mapHint && (
-                    <div className="mt-3">
-                      <Button size="sm" variant="secondary" onClick={() => setState((s) => ({ ...s, activeTab: 'map', mapFocus: m.mapHint }))}>
-                        {Icons.pin} Show on map
-                      </Button>
-                    </div>
-                  )}
+                  {m.role === 'user'
+                    ? <p>{m.text}</p>
+                    : <BotMessage text={m.text} contacts={m.contacts} allContacts={state.contacts} openDrawer={openDrawer} />
+                  }
                 </div>
               </div>
             ))}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bubble-bot px-4 py-3 text-sm text-warm-500 flex items-center gap-1">
+                  <span className="thinking-dot" />
+                  <span className="thinking-dot" style={{ animationDelay: '0.2s' }} />
+                  <span className="thinking-dot" style={{ animationDelay: '0.4s' }} />
+                </div>
+              </div>
+            )}
             <div ref={endRef} />
           </div>
           <div className="p-4 bg-surface border-t border-warm-200 flex items-center gap-2">
             <input value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               placeholder="e.g. who do I know in Lisbon?"
-              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-warm-50 focus:bg-surface transition-colors" />
-            <Button onClick={send} icon={Icons.send}>Send</Button>
+              disabled={loading}
+              className="flex-1 px-4 py-3 rounded-xl border border-warm-300 bg-warm-50 focus:bg-surface transition-colors disabled:opacity-50" />
+            <Button onClick={send} icon={Icons.send} disabled={loading}>Send</Button>
           </div>
         </div>
       )}
@@ -1557,8 +1771,105 @@ function SettingsTab() {
   const [deleting, setDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState('');
 
-  const updateLLM = (patch) => setState((s) => ({ ...s, llm: { ...s.llm, ...patch } }));
   const updateNudges = (patch) => setState((s) => ({ ...s, nudges: { ...s.nudges, ...patch } }));
+
+  const [llmDraft, setLlmDraft] = useState({
+    provider: state.llm?.provider || 'ollama',
+    endpoint: state.llm?.endpoint || 'http://localhost:11434',
+    model: state.llm?.model || '',
+    apiKey: state.llm?.apiKey || '',
+    connected: state.llm?.connected || false,
+  });
+  const [llmTesting, setLlmTesting] = useState(false);
+  const [llmTestResult, setLlmTestResult] = useState(
+    state.llm?.connected ? { ok: true, message: 'Previously verified.' } : null
+  );
+  const [llmModels, setLlmModels] = useState(state.llm?.availableModels || []);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  const testAndSaveLlm = async () => {
+    setLlmTesting(true);
+    setLlmTestResult(null);
+    try {
+      const timed = async (url, opts) => {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+        finally { clearTimeout(t); }
+      };
+
+      if (llmDraft.provider === 'ollama' || llmDraft.provider === 'other') {
+        const endpoint = (llmDraft.endpoint || 'http://localhost:11434').replace(/\/$/, '');
+        const res = await timed(`${endpoint}/api/tags`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const modelNames = (data.models || []).map((m) => m.name);
+        setLlmModels(modelNames);
+        if (!modelNames.length) {
+          setState((s) => ({ ...s, llm: { ...llmDraft, endpoint, connected: false } }));
+          setLlmTestResult({ ok: false, message: 'Ollama reachable but no models found — run: ollama pull <model>' });
+          return;
+        }
+        const selectedModel = llmDraft.model || modelNames[0];
+        if (!modelNames.includes(selectedModel)) {
+          setLlmTestResult({ ok: false, message: `Model "${selectedModel}" not found. Available: ${modelNames.slice(0, 3).join(', ')}${modelNames.length > 3 ? '…' : ''}` });
+          return;
+        }
+        // Actually test the model responds via chat
+        const chatCtrl = new AbortController();
+        const chatTimer = setTimeout(() => chatCtrl.abort(), 90000);
+        try {
+          const chatRes = await fetch(`${endpoint}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: chatCtrl.signal,
+            body: JSON.stringify({ model: selectedModel, messages: [{ role: 'user', content: 'hi' }], stream: false, think: false, options: { num_predict: 5 } }),
+          });
+          if (!chatRes.ok) {
+            const errText = await chatRes.text().catch(() => '');
+            throw new Error(`Model test failed: HTTP ${chatRes.status}${errText ? ' — ' + errText.slice(0, 100) : ''}`);
+          }
+        } finally {
+          clearTimeout(chatTimer);
+        }
+        const saved = { ...llmDraft, endpoint, model: selectedModel, availableModels: modelNames, connected: true };
+        setState((s) => ({ ...s, llm: saved }));
+        setLlmDraft(saved);
+        setLlmTestResult({ ok: true, message: `Connected. Using: ${selectedModel}${modelNames.length > 1 ? ` (${modelNames.length} models available)` : ''}` });
+      } else if (llmDraft.provider === 'gemini') {
+        if (!llmDraft.apiKey.trim()) throw new Error('API key is required.');
+        const res = await timed(`https://generativelanguage.googleapis.com/v1beta/models?key=${llmDraft.apiKey}`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        const modelNames = (data.models || [])
+          .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m) => m.name.replace('models/', ''));
+        const preferred = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+        const detectedModel = (llmDraft.model && modelNames.includes(llmDraft.model))
+          ? llmDraft.model
+          : preferred.find((p) => modelNames.includes(p)) || modelNames[0] || '';
+        const saved = { ...llmDraft, model: detectedModel, availableModels: modelNames, connected: true };
+        setState((s) => ({ ...s, llm: saved }));
+        setLlmDraft(saved);
+        setLlmModels(modelNames);
+        setLlmTestResult({ ok: true, message: `Connected. ${modelNames.length} model${modelNames.length !== 1 ? 's' : ''} available.` });
+      } else {
+        const saved = { ...llmDraft, connected: false };
+        setState((s) => ({ ...s, llm: saved }));
+        setLlmDraft(saved);
+        setLlmTestResult({ ok: true, message: 'Saved. Connection testing not yet supported for this provider.' });
+      }
+    } catch (e) {
+      const errMsg = e.name === 'AbortError' ? 'Connection timed out.' : e.message;
+      setState((s) => ({ ...s, llm: { ...llmDraft, connected: false } }));
+      setLlmTestResult({ ok: false, message: `Could not connect — ${errMsg}` });
+    } finally {
+      setLlmTesting(false);
+    }
+  };
 
   const unlink = async () => {
     try {
@@ -1637,7 +1948,6 @@ function SettingsTab() {
           </div>
         </div>
         <div>
-          <p className="text-sm text-warm-700 mb-2">Category colors</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {RESERVED_LABELS.map((c) => (
               <div key={c.key} className="flex items-center gap-2 p-2 rounded-lg border border-warm-200 bg-surface text-sm">
@@ -1646,34 +1956,88 @@ function SettingsTab() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-warm-500 mt-2 italic">Per-category overrides editable in a later build. Multi-category contacts always render in <span className="inline-block w-2 h-2 rounded-full align-middle" style={{ background: MULTI_COLOR }}></span> Deep Purple.</p>
         </div>
       </Card>
 
       {/* LLM */}
       <Card className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">LLM config</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-xs text-warm-600">Provider</span>
-            <select value={state.llm.provider} onChange={(e) => updateLLM({ provider: e.target.value })}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface">
-              <option value="demo">Demo matcher (local, no network)</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="ollama">Local Ollama</option>
-              <option value="other">Other (OpenAI-compatible)</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-warm-600">{state.llm.provider === 'ollama' || state.llm.provider === 'other' ? 'Endpoint URL' : 'API key'}</span>
-            <input type="password" value={state.llm.provider === 'ollama' || state.llm.provider === 'other' ? state.llm.endpoint : state.llm.apiKey}
-              onChange={(e) => updateLLM(state.llm.provider === 'ollama' || state.llm.provider === 'other' ? { endpoint: e.target.value } : { apiKey: e.target.value })}
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" placeholder={state.llm.provider === 'demo' ? 'Not needed' : '—'}
-              disabled={state.llm.provider === 'demo'} />
-          </label>
+        <div>
+          <span className="text-xs text-warm-600">Provider</span>
+          <select value={llmDraft.provider}
+            onChange={(e) => { setLlmDraft((d) => ({ ...d, provider: e.target.value, model: '' })); setLlmTestResult(null); setLlmModels([]); }}
+            className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface">
+            <option value="ollama">Local Ollama</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openai" disabled>OpenAI (coming soon)</option>
+            <option value="anthropic" disabled>Anthropic (coming soon)</option>
+          </select>
         </div>
-        <div className="text-xs text-warm-500">Keys are stored locally in your browser and sent only to the provider you chose.</div>
+        {(llmDraft.provider === 'ollama' || llmDraft.provider === 'other') && (
+          <>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <p><strong>Model quality matters for local Ollama.</strong> Small models (under ~13B parameters) often give slow or inaccurate results on CRM tasks.</p>
+              <p>If AI search or chat isn't working well, try switching to a more powerful model.</p>
+            </div>
+            <div>
+              <span className="text-xs text-warm-600">Endpoint URL</span>
+              <input value={llmDraft.endpoint}
+                onChange={(e) => { setLlmDraft((d) => ({ ...d, endpoint: e.target.value })); setLlmTestResult(null); }}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface"
+                placeholder="http://localhost:11434" />
+            </div>
+          </>
+        )}
+        {(llmDraft.provider === 'gemini' || llmDraft.provider === 'openai' || llmDraft.provider === 'anthropic') && (
+          <div>
+            <span className="text-xs text-warm-600">API Key</span>
+            <div className="relative mt-1">
+              <input type={showApiKey ? 'text' : 'password'} value={llmDraft.apiKey}
+                onChange={(e) => { setLlmDraft((d) => ({ ...d, apiKey: e.target.value })); setLlmTestResult(null); setLlmModels([]); }}
+                className="w-full px-3 py-2 pr-10 rounded-lg border border-warm-300 bg-surface"
+                placeholder={llmDraft.provider === 'gemini' ? 'AIza…' : 'sk-…'} />
+              <button type="button" onClick={() => setShowApiKey((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-700 p-1">
+                {showApiKey
+                  ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+        <div>
+          <span className="text-xs text-warm-600">
+            Model
+            {llmModels.length > 0 && <span className="text-warm-400"> (populated from {llmDraft.provider === 'ollama' ? 'Ollama' : 'API key'})</span>}
+          </span>
+          {llmModels.length > 0 ? (
+            <select value={llmDraft.model}
+              onChange={(e) => { setLlmDraft((d) => ({ ...d, model: e.target.value })); setLlmTestResult(null); }}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface">
+              {llmModels.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input value={llmDraft.model}
+              onChange={(e) => { setLlmDraft((d) => ({ ...d, model: e.target.value })); setLlmTestResult(null); }}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface"
+              placeholder="Click Test & Save to see available models" />
+          )}
+        </div>
+        <div className="flex items-center gap-3 pt-1">
+          <Button onClick={testAndSaveLlm} disabled={llmTesting}>
+            {llmTesting ? 'Testing…' : 'Test & Save'}
+          </Button>
+          {llmTestResult && (
+            <span className={`text-sm ${llmTestResult.ok ? 'text-sage-700' : 'text-red-600'}`}>
+              {llmTestResult.ok ? '✓ ' : '✗ '}{llmTestResult.message}
+            </span>
+          )}
+        </div>
+        {llmTestResult?.ok && llmDraft.provider === 'ollama' && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">If search results seem wrong or chat responses are poor, your model may not be powerful enough — try a larger or more capable model.</p>
+        )}
+        <p className="text-xs text-warm-500">Settings are stored locally in your browser and sent only to the provider you configure.</p>
       </Card>
 
       {/* Calendar */}
@@ -1690,7 +2054,6 @@ function SettingsTab() {
         <h3 className="font-serif text-lg text-warm-900">Transparency Portal</h3>
         <p className="text-sm text-warm-700">
           All your Tether data lives in a single hidden file (<code className="font-mono text-xs">tether_contacts_v1.json</code>) in your Google Drive's private <strong>appData</strong> folder — invisible in Drive UI, safe from accidental deletion.
-          Google Contacts are read once to seed your initial list, and never written to again.
         </p>
         <div className="flex gap-2 flex-wrap">
           <Button variant="secondary" onClick={() => {
@@ -1703,13 +2066,7 @@ function SettingsTab() {
             a.click();
             URL.revokeObjectURL(url);
           }}>Export all data</Button>
-          <Button variant="outline" onClick={() => setShowRawData((v) => !v)}>{showRawData ? 'Hide' : 'View'} raw JSON</Button>
         </div>
-        {showRawData && (
-          <pre className="p-4 bg-warm-100 rounded-lg text-xs font-mono text-warm-800 overflow-x-auto max-h-60 overflow-y-auto">
-            {JSON.stringify({ contacts: state.contacts.slice(0, 3), '...': `(${state.contacts.length} total contacts)` }, null, 2)}
-          </pre>
-        )}
       </Card>
 
       {/* Nudges */}
@@ -1723,7 +2080,6 @@ function SettingsTab() {
           <span>days</span>
         </div>
         <div>
-          <p className="text-sm text-warm-700 mb-2">Label colors</p>
           <div className="space-y-2">
             {RESERVED_LABELS.map((c) => (
               <div key={c.key} className="flex items-center gap-3">
@@ -1737,10 +2093,6 @@ function SettingsTab() {
             ))}
           </div>
         </div>
-        <label className="flex items-center gap-3 pt-2 border-t border-warm-200">
-          <input type="checkbox" checked={state.nudges.emailDigest} onChange={(e) => updateNudges({ emailDigest: e.target.checked })} />
-          <span className="text-sm">Send me a weekly email digest of stale close friends and overdue group check-ins.</span>
-        </label>
       </Card>
 
       {/* Data Management */}

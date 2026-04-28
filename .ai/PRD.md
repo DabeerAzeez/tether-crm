@@ -417,105 +417,17 @@ Since this is free and open source with no telemetry, traditional product metric
 
 ## 10. Milestones (v1)
 
-- **M1 — Foundation**
-  - ~~Google OAuth (Contacts read-only + Calendar + Drive scopes), bulk contact import during onboarding, label import, Drive appDataFolder storage.~~
-  - ~~Implement Google OAuth 2.0 flow for Contacts, Calendar, and Drive.~~
-  - ~~Handle OAuth token storage and refresh logic in localStorage.~~
-  - ~~Create initial onboarding wizard for sign-in.~~
-  - ~~Implement bulk contact fetch from People API.~~
-  - ~~Implement initial calendar event fetch (last 3 months) from Calendar API.~~
-  - ~~Set up Drive appDataFolder read/write for tether_contacts_v1.json.~~
-  - ~~Build basic landing page structure.~~
-  - ~~Import existing Google Contact labels.~~
-- **M2 — All Contacts + editing**
-  - ~~Full list, full profile view, edits saved to Drive~~
-  - ~~Sync contact info to Google Drive so changes persist across logins / browsers~~
-  - ~~Create "All Contacts" list view~~
-  - ~~Build detailed Contact Profile view showing all fields.~~
-  - ~~Enable editing of name, phone, and email~~
-  - ~~Add contact sorting (name, last contacted, category, location).~~
-  - ~~Add basic search/filter by name and label~~
-- **M3 — Categories + Reconnect**
-  - ~~Design and implement light/dark theme system.~~
-  - ~~Create Reconnect dashboard tab.~~
-  - ~~Implement per-contact nudge threshold settings.~~
-  - ~~Implement group-level nudge cadences for categories.~~
-  - ~~Build Reconnect empty-state with guided setup.~~
-  - ~~Implement "staleness" visual indicators on contact cards.~~
-- **M4 — Interaction logging**
-  - Manual log flow, bulk log, interaction history, write to `Personal CRM` Google Calendar (no guest invites).
-  - Create "Log Interaction" modal/form with date, type, and note fields.
-  - Implement bulk interaction logging for multiple contacts.
-  - Build interaction history timeline on contact profiles.
-  - Implement creation of a dedicated `Personal CRM` calendar in Google.
-  - Write logged interactions as events to the `Personal CRM` calendar.
-  - Ensure no guest invites are sent during interaction logging.
-  - Support editing and deleting past interaction logs.
-  - Map interaction types (call, hangout, etc.) to consistent icons.
-  - Update "last contacted" timestamp on successful log.
-  - Handle calendar write permission request in context.
-- **M5 — Calendar**
-  - Google Calendar sync, matched attendees, unresolved-attendee question-mark flow, resolver with suggestions, write-back to event guest lists.
-  - Build the main Calendar view (3-month window).
-  - Match calendar event guests against the contact database.
-  - Highlight "unresolved" attendees with the question-mark chip.
-  - Create the attendee resolver UI with suggestions.
-  - Implement name matching and co-attendance logic for suggestions.
-  - Enable manual search in the attendee resolver.
-  - Write resolved attendees back to the original Google Calendar event.
-  - Show interaction markers on the calendar for manual logs.
-  - Add "unresolved events" counter to the Calendar tab.
-  - Support dismissing false-positive unresolved attendees.
-- **M6 — Map**
-  - Pins by category, drop-pin mode, distance/recency sort, chat invocation.
-  - Integrate Leaflet/OpenStreetMap for the Map tab.
-  - Resolve contact addresses to lat/long using geocoding.
-  - Plot contacts as category-colored pins on the map.
-  - Implement pin clustering for dense areas.
-  - Build "Drop-a-pin" mode for local proximity search.
-  - Implement proximity sorting (closest, least recently contacted).
-  - Add adjustable search radius (10km to 500km).
-  - Connect Map tab to Ask tab for geographic queries.
-  - Show contact summary card when clicking a pin.
-  - Cache geocoding results to minimize API calls.
+- **M1 — Foundation** ✅ — Google OAuth, bulk contact import, Drive appDataFolder storage.
+- **M2 — All Contacts + Editing** ✅ — Full contact list and profile views, in-app editing synced to Drive.
+- **M3 — Categories + Reconnect** ✅ — Category system, nudge thresholds, Reconnect tab with staleness indicators.
+- **M4 — Interaction Logging** — Manual and bulk interaction logging, calendar write integration, interaction history timeline.
+- **M5 — Calendar** — Google Calendar sync, matched attendee chips, unresolved-attendee resolver, write-back to Calendar events.
+- **M6 — Map** — Geographic contact view with category-colored pins, drop-pin proximity search, Ask tab integration.
+- **M7 — Ask** ✅ (partial) — LLM chat over contact metadata, inline contact cards. Remaining: chat persistence, map invocation from chat.
+- **M8 — Help + Settings** — Full settings surface (color picker, calendar selection, sync status), onboarding restart, dashboard walkthrough.
+- **M9 — Polish** — Accessibility (WCAG 2.1 AA), performance optimization, documentation, cross-browser testing.
 
-  The Tether Map interface will provide a geographic visualization of the user's network using static, color-coded pins to indicate relationship "warmth" based on recent interaction frequency. While avoiding overly dynamic elements like live stories or moving avatars, the map will feature contextual iconography—such as a specific symbol to denote a contact's birthday—and numerical clustering to indicate high-density areas of contacts. Interactivity will be streamlined through a sidebar integration: clicking any individual pin will trigger a slide-out panel displaying the contact's full profile information, maintaining UI consistency with the primary Contacts tab while ensuring the map remains a functional tool for personal CRM rather than a social media feed.
-- **M7 — Ask**
-  - LLM integration with user-configured endpoint, metadata + notes retrieval, map invocation from chat.
-  - Build the Chat/Ask interface tab.
-  - Implement metadata retrieval logic for the LLM context.
-  - Support OpenAI, Anthropic, and local Ollama endpoints.
-  - Design prompts for querying contact skills, locations, and notes.
-  - Render contact cards inline within chat responses.
-  - Implement "Show on Map" trigger from chat queries.
-  - Add chat history persistence (local only).
-  - Handle API errors and rate limits gracefully.
-  - Implement privacy disclosure for cloud LLM usage.
-  - Optimize context window usage for large contact lists.
-- **M8 — Help + Settings**
-  - Documentation, restart onboarding, walkthrough replay, sync status, sync calendar, re-import contacts, unlink, theme, category color config, nudge config, LLM config, calendar write toggle.
-  - Create comprehensive Help tab with collapsible guides.
-  - Implement "Restart Onboarding" functionality.
-  - Build the interactive dashboard walkthrough tooltips.
-  - Create Settings interface for all app configurations.
-  - Implement manual "Sync Calendar" and "Re-import contacts" actions.
-  - Add LLM provider and API key configuration.
-  - Add category color picker and theme toggle.
-  - Implement "Unlink Account" (local data wipe) with confirmation.
-  - Add calendar selection (which calendars to sync).
-  - Display detailed sync status and permission scopes.
-- **M9 — Polish**
-  - Accessibility, docs site, contribution guide, opt-in email digest.
-  - Perform full WCAG 2.1 AA accessibility audit and fixes.
-  - Implement keyboard navigation for all interactive elements.
-  - Set up external documentation site/GitHub Wiki.
-  - Finalize the weekly opt-in email digest logic.
-  - Add micro-animations and transitions for "premium" feel.
-  - Optimize initial load time and data fetching.
-  - Write contributor guidelines and README.
-  - Add "Export to JSON" as a basic data portability feature.
-  - Conduct final cross-browser testing (Chrome, Firefox, Safari).
-
+See `.resources/TODO.md` for detailed task breakdown.
 
 ## 11. Open questions
 
