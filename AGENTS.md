@@ -7,7 +7,7 @@ Start the dev server and open the app in the browser to check for syntax errors 
 
 ## Product Requirements
 
-The full PRD is at `.ai/PRD.md`. Detailed TODO items are in `.resources/TODO.md` (gitignored).
+The full PRD is at `.agents/PRD.md`. Detailed TODO items are in `.resources/TODO.md` (gitignored).
 
 ## Dev Server
 
