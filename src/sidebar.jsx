@@ -6,7 +6,7 @@ const { useMemo, useState } = React;
 const { Icons, RESERVED_LABELS } = window.TetherConstants;
 const { useApp } = window.TetherContext;
 const { useDrawer } = window.TetherDrawer;
-const { importanceScore } = window.TetherHelpers;
+const { importanceScore, daysSince } = window.TetherHelpers;
 
 // ───────────────────────────────────────────────────────────────────
 // Helper hooks
@@ -44,11 +44,25 @@ function useUnresolvedCount() {
 }
 function useStaleCloseCount() {
   const { state } = useApp();
-  return useMemo(() => state.contacts.filter((c) =>
-    c.crmLabels.includes('CRM: Close Friends') &&
-    c.nudgeFrequencyDays != null &&
-    c.lastContactedDaysAgo > c.nudgeFrequencyDays
-  ).length, [state.contacts]);
+  return useMemo(() => state.contacts.filter((c) => {
+    if (c.nudgeFrequencyDays == null) return false;
+    const daysAgo = c.lastContactedAt ? daysSince(c.lastContactedAt) : (c.lastContactedDaysAgo ?? Infinity);
+    return daysAgo > c.nudgeFrequencyDays;
+  }).length, [state.contacts]);
+}
+
+function usePendingInboxCount() {
+  const { state } = useApp();
+  return useMemo(() => {
+    const now = new Date();
+    return state.events.filter((e) => {
+      if (e.synthetic) return false;
+      if (state.dismissedEventIds?.includes(e.id)) return false;
+      if (state.resolvedEventIds?.includes(e.id)) return false;
+      if ((state.calendarKeywordBlacklist || []).some((kw) => e.title.toLowerCase().includes(kw.toLowerCase()))) return false;
+      return new Date(e.start) < now;
+    }).length;
+  }, [state.events, state.dismissedEventIds, state.resolvedEventIds, state.calendarKeywordBlacklist]);
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -76,8 +90,8 @@ function Sidebar() {
   const { state, setState, allLabels, updateContact, addCustomLabel,
     createThread, deleteThread, renameThread, setActiveThread, MAX_THREADS } = useApp();
   const setTab = (key) => setState((s) => ({ ...s, activeTab: key, activeLabelFilter: null }));
-  const unresolvedCount = useUnresolvedCount();
   const staleCount = useStaleCloseCount();
+  const pendingInboxCount = usePendingInboxCount();
 
   const isWalkthrough = state.phase === 'walkthrough';
 
@@ -128,13 +142,13 @@ function Sidebar() {
         <nav className="px-3 pt-2 space-y-1">
           {NAV.map((item) => {
             const active = state.activeTab === item.key && !state.activeLabelFilter;
-            const badge = item.key === 'calendar' && unresolvedCount > 0 ? unresolvedCount
+            const badge = item.key === 'calendar' && pendingInboxCount > 0 ? pendingInboxCount
               : item.key === 'reconnect' && staleCount > 0 ? staleCount : null;
             const isHighlight = isWalkthrough && active;
             return (
               <React.Fragment key={item.key}>
                 <button onClick={() => setTab(item.key)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50 dark:bg-warm-300 dark:text-warm-900' : 'text-warm-700 hover:bg-warm-100 dark:text-warm-700 dark:hover:bg-warm-200'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
                   <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
                   <span className="flex-1 text-left">{item.label}</span>
                   {badge != null && <span className={`text-xs px-2 py-0.5 rounded-full ${active ? 'bg-warm-50/20 text-warm-50' : 'bg-sage-500 text-warm-50'}`}>{badge}</span>}
@@ -246,18 +260,18 @@ function Sidebar() {
 
           return (
             <button key={item.key} onClick={() => setTab(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50' : 'text-warm-700 hover:bg-warm-100'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${active ? 'bg-warm-900 text-warm-50 dark:bg-warm-300 dark:text-warm-900' : 'text-warm-700 hover:bg-warm-100 dark:text-warm-700 dark:hover:bg-warm-200'} ${isHighlight ? 'ring-4 ring-sage-400 ring-offset-2 ring-offset-warm-50' : ''}`}>
               <span className={active ? 'text-warm-50' : 'text-warm-600'}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
             </button>
           );
         })}
         {state.demoMode && (
-          <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-300">
             <span className="flex-1 font-medium">Demo mode</span>
             <button
               onClick={() => { localStorage.removeItem(window.TetherStorage.STORAGE_KEY); window.location.reload(); }}
-              className="underline hover:text-amber-900 transition-colors"
+              className="underline hover:text-amber-900 dark:hover:text-amber-100 transition-colors"
             >
               Exit
             </button>
@@ -277,4 +291,5 @@ window.TetherSidebar = {
   getUnresolvedHints,
   useUnresolvedCount,
   useStaleCloseCount,
+  usePendingInboxCount,
 };

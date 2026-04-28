@@ -554,7 +554,7 @@ function AllContactsTab() {
     if (filter) {
       r = r.filter((c) => {
         const match = allLabels.find((lab) => lab.key === filter);
-        return match && c.crmLabels.includes(match.label);
+        return match && (c.crmLabels.includes(match.label) || c.googleLabels.includes(match.label));
       });
     }
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -906,14 +906,14 @@ function CalendarTab() {
       ) : (
         <>
           {pending.length > 0 && (
-            <section className="bg-amber-50 border border-amber-200 rounded-xl relative">
+            <section className="bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/60 rounded-xl relative">
               <div
-                className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition rounded-t-xl"
+                className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-950/40 transition rounded-t-xl"
                 onClick={() => setPendingCollapsed(!pendingCollapsed)}
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-serif text-lg text-amber-900 flex items-center gap-2">
+                    <h2 className="font-serif text-lg text-amber-900 dark:text-amber-300 flex items-center gap-2">
                       <span className="scale-75 origin-left transform transition-transform" style={{ display: 'inline-block', rotate: pendingCollapsed ? '-90deg' : '0deg' }}>▼</span>
                       Pending Inbox ({pending.length})
                     </h2>
@@ -944,7 +944,7 @@ function CalendarTab() {
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">Review and curate your social history.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Review and curate your social history.</p>
                 </div>
               </div>
               {!pendingCollapsed && (
@@ -1476,6 +1476,7 @@ function MapTab() {
   const { open: openDrawer, openLog } = useDrawer();
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const markersRef = useRef({}); // keyed by contact id
   const dropPinRef = useRef(null);
   const [droppedLatLng, setDroppedLatLng] = useState(null);
@@ -1529,7 +1530,9 @@ function MapTab() {
     const L = window.L;
     const hint = state.mapFocus || { lat: 20, lng: 10, zoom: 2 };
     const map = L.map(mapRef.current, { center: [hint.lat, hint.lng], zoom: hint.zoom, worldCopyJump: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
+    const initTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 });
+    initTile.addTo(map);
+    tileLayerRef.current = initTile;
     map.on('click', () => { setDroppedLatLng((prev) => prev); setSelectedId(null); });
     map.on('click', (e) => setDroppedLatLng({ lat: e.latlng.lat, lng: e.latlng.lng }));
     leafletRef.current = map;
@@ -1555,6 +1558,21 @@ function MapTab() {
       leafletRef.current = null;
     };
   }, [state.mapFocus]);
+
+  // Swap tile layer when theme changes
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const L = window.L;
+    const map = leafletRef.current;
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
+    const isDark = state.theme === 'dark';
+    const tileUrl = isDark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const tile = L.tileLayer(tileUrl, { attribution: '© OpenStreetMap contributors', maxZoom: 18 });
+    tile.addTo(map);
+    tileLayerRef.current = tile;
+  }, [state.theme]);
 
   // Rebuild pins when contacts / filter / selection change
   useEffect(() => {
@@ -2319,10 +2337,10 @@ function SettingsTab() {
         <h3 className="font-serif text-lg text-warm-900">Appearance</h3>
         <div className="flex items-center gap-3">
           <span className="text-sm text-warm-700">Theme</span>
-          <div className="flex rounded-lg bg-warm-100 p-1">
+          <div className="flex rounded-lg bg-warm-200 dark:bg-warm-300 p-1">
             {['light', 'dark'].map((t) => (
               <button key={t} onClick={() => setTheme(t)}
-                className={`px-4 py-1.5 rounded-md text-sm capitalize ${state.theme === t ? 'bg-surface shadow-sm text-warm-900' : 'text-warm-600'}`}>{t}</button>
+                className={`px-4 py-1.5 rounded-md text-sm capitalize transition-colors ${state.theme === t ? 'bg-white dark:bg-warm-500 shadow-sm text-warm-900 dark:text-warm-50' : 'text-warm-600 dark:text-warm-700 hover:text-warm-900 dark:hover:text-warm-900'}`}>{t}</button>
             ))}
           </div>
         </div>
@@ -2513,8 +2531,8 @@ function SettingsTab() {
       </Card>
 
       {/* Data Management */}
-      <Card className="p-6 space-y-4 border-red-100">
-        <h3 className="font-serif text-lg text-red-900">Danger Zone</h3>
+      <Card className="p-6 space-y-4 border-red-200 dark:border-red-900/40">
+        <h3 className="font-serif text-lg text-red-700 dark:text-red-400">Danger Zone</h3>
         <p className="text-sm text-warm-700">
           Wipe all contact data, interactions, and notes. This affects both your private Google Drive file and your local browser storage.
         </p>
