@@ -35,6 +35,7 @@
       skills: ['Climbing', 'Product management', 'Writing'],
       lastContactedDaysAgo: 41,
       avatar: avatar('Priya Shah', 320),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c2', name: 'Alex Novak', email: 'alex.novak@example.com', phone: '+1 212 555 0188',
@@ -45,6 +46,7 @@
       skills: ['Wine', 'Hosting'],
       lastContactedDaysAgo: 12,
       avatar: avatar('Alex Novak', 15),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c3', name: 'Jordan Reeves', email: 'jordan@reeves.dev', phone: '+1 512 555 0134',
@@ -55,6 +57,7 @@
       skills: ['Climbing', 'Bouldering'],
       lastContactedDaysAgo: 78,
       avatar: avatar('Jordan Reeves', 200),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c4', name: 'Maya Okafor', email: 'maya.okafor@example.com', phone: '+44 20 7946 0018',
@@ -65,6 +68,7 @@
       skills: ['Writing', 'Editing', 'Reading'],
       lastContactedDaysAgo: 9,
       avatar: avatar('Maya Okafor', 280),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c5', name: 'Theo Laurent', email: 'theo.laurent@example.com', phone: '+33 6 12 34 56 78',
@@ -75,6 +79,7 @@
       skills: ['Leadership', 'Pricing', 'B2B SaaS'],
       lastContactedDaysAgo: 63,
       avatar: avatar('Theo Laurent', 45),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c6', name: 'Sara Bergström', email: 'sara.bergstrom@example.com', phone: '+46 70 555 0134',
@@ -85,6 +90,7 @@
       skills: ['Design systems', 'UX research', 'Mentoring'],
       lastContactedDaysAgo: 120,
       avatar: avatar('Sara Bergström', 180),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c7', name: 'Luis Fernández', email: 'luis.f@example.com', phone: '+34 91 555 0012',
@@ -95,6 +101,7 @@
       skills: ['Distributed systems', 'Rust', 'CRDTs'],
       lastContactedDaysAgo: 34,
       avatar: avatar('Luis Fernández', 130),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c8', name: 'Chen Wei', email: 'chen.wei@example.com', phone: '+65 9123 4567',
@@ -115,6 +122,7 @@
       skills: ['Poetry', 'Hosting', 'Engineering'],
       lastContactedDaysAgo: 24,
       avatar: avatar('Aisha Rahman', 340),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c10', name: 'Mom (Elena Vasquez)', email: 'elena.v@example.com', phone: '+1 305 555 0112',
@@ -124,6 +132,7 @@
       custom: { relationship: 'Mother' },
       lastContactedDaysAgo: 3,
       avatar: avatar('Elena Vasquez', 0),
+      crmLabels: ['CRM: Family'], nudgeFrequencyDays: 14,
     },
     {
       id: 'c11', name: 'Dad (Miguel Vasquez)', email: '', phone: '+1 305 555 0144',
@@ -133,6 +142,7 @@
       custom: { relationship: 'Father' },
       lastContactedDaysAgo: 6,
       avatar: avatar('Miguel Vasquez', 25),
+      crmLabels: ['CRM: Family'], nudgeFrequencyDays: 14,
     },
     {
       id: 'c12', name: 'Hanna Lund', email: 'hanna.lund@example.com', phone: '+47 912 34 567',
@@ -143,6 +153,7 @@
       skills: ['Editing', 'Publishing', 'Hiking'],
       lastContactedDaysAgo: 45,
       avatar: avatar('Hanna Lund', 160),
+      crmLabels: ['CRM: Casual Friends'], nudgeFrequencyDays: 60,
     },
     {
       id: 'c13', name: 'Marcus Doyle', email: 'mdoyle@example.com', phone: '+353 1 555 0122',
@@ -153,6 +164,7 @@
       skills: ['Product management', 'Pricing', 'Reading'],
       lastContactedDaysAgo: 55,
       avatar: avatar('Marcus Doyle', 100),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c14', name: 'Noa Gershon', email: 'noa@example.com', phone: '+972 50 555 0133',
@@ -203,6 +215,7 @@
       skills: ['Medicine', 'Climbing', 'Hiking'],
       lastContactedDaysAgo: 7,
       avatar: avatar('Emma Chen', 310),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c19', name: 'Olu Adeyemi', email: 'olu.a@example.com', phone: '+234 81 555 0101',
@@ -213,6 +226,7 @@
       skills: ['Product management', 'Fintech', 'Emerging markets'],
       lastContactedDaysAgo: 67,
       avatar: avatar('Olu Adeyemi', 210),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c20', name: 'Kenji Watanabe', email: 'k.watanabe@example.com', phone: '+81 90 5555 0122',
@@ -253,6 +267,7 @@
       skills: ['Literature', 'Teaching'],
       lastContactedDaysAgo: 28,
       avatar: avatar('Priscilla Owen', 295),
+      crmLabels: ['CRM: Casual Friends'], nudgeFrequencyDays: 60,
     },
     {
       id: 'c24', name: 'Dario Ferri', email: 'dario.ferri@example.com', phone: '+39 02 555 0122',
@@ -272,6 +287,7 @@
       skills: ['Economics', 'Policy'],
       lastContactedDaysAgo: 85,
       avatar: avatar('Sophie Tremblay', 250),
+      crmLabels: ['CRM: Casual Friends'], nudgeFrequencyDays: 60,
     },
     {
       id: 'c26', name: 'Rahul Mehta', email: 'rahul.mehta@example.com', phone: '+1 647 555 0122',
@@ -282,6 +298,7 @@
       skills: ['Venture capital', 'Climate tech'],
       lastContactedDaysAgo: 52,
       avatar: avatar('Rahul Mehta', 115),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c27', name: 'Yuki Tanaka', email: 'yuki.tanaka@example.com', phone: '+81 90 1234 5678',
@@ -322,6 +339,7 @@
       skills: ['Climbing', 'Alpine', 'Guiding'],
       lastContactedDaysAgo: 48,
       avatar: avatar('Tom Breckenridge', 85),
+      crmLabels: ['CRM: Close Friends'], nudgeFrequencyDays: 30,
     },
     {
       id: 'c31', name: 'Aunt Rosa', email: '', phone: '+1 305 555 0121',
@@ -331,6 +349,7 @@
       custom: { relationship: 'Aunt' },
       lastContactedDaysAgo: 14,
       avatar: avatar('Rosa', 330),
+      crmLabels: ['CRM: Family'], nudgeFrequencyDays: 14,
     },
     {
       id: 'c32', name: 'Sam Oduya', email: 'sam.o@example.com', phone: '+254 722 555 012',
@@ -351,6 +370,7 @@
       skills: ['Recruiting', 'Hiring'],
       lastContactedDaysAgo: 72,
       avatar: avatar('Nadia Kowalski', 145),
+      crmLabels: ['CRM: Professional'],
     },
     {
       id: 'c34', name: 'Berlin Climbing Crew', email: 'crew@example.com', phone: '',
@@ -384,8 +404,8 @@
         note: '',
       },
     ];
-    c.crmLabels = []; // will be populated after onboarding
-    c.nudgeFrequencyDays = null; // e.g. 30 for close friends
+    if (!('crmLabels' in c)) c.crmLabels = [];
+    if (!('nudgeFrequencyDays' in c)) c.nudgeFrequencyDays = null;
   });
 
   // --- CALENDAR EVENTS --------------------------------------------------

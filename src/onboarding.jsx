@@ -77,6 +77,19 @@ function SignInScreen() {
     }
   };
 
+  const tryDemo = () => {
+    const mock = window.TETHER_MOCK;
+    setState((s) => ({
+      ...s,
+      phase: 'syncing',
+      demoMode: true,
+      googleSignedIn: false,
+      googleProfile: mock.googleProfile,
+      contacts: mock.contacts,
+      events: mock.events,
+    }));
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-warm-50 via-warm-100 to-sage-100">
       <div className="flex flex-col items-center text-center max-w-md w-full gap-6">
@@ -110,6 +123,20 @@ function SignInScreen() {
             <span className="font-medium text-warm-900">{busy ? 'Connecting…' : 'Sign in with Google'}</span>
           </button>
           {err && <div className="text-sm text-red-700 text-center rounded-lg bg-red-50 border border-red-200 px-3 py-2">{err}</div>}
+
+          <div className="flex items-center gap-3 py-1">
+            <div className="flex-1 h-px bg-warm-200" />
+            <span className="text-xs text-warm-400">or</span>
+            <div className="flex-1 h-px bg-warm-200" />
+          </div>
+
+          <button
+            data-testid="try-demo-btn"
+            onClick={tryDemo}
+            className="w-full px-5 py-3 rounded-xl border border-warm-200 bg-warm-50 hover:bg-warm-100 text-warm-700 hover:text-warm-900 text-sm font-medium transition-all duration-200"
+          >
+            Try demo — no account needed
+          </button>
         </div>
 
         {/* Footer */}

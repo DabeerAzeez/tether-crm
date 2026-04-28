@@ -252,6 +252,17 @@ function Sidebar() {
             </button>
           );
         })}
+        {state.demoMode && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            <span className="flex-1 font-medium">Demo mode</span>
+            <button
+              onClick={() => { localStorage.removeItem(window.TetherStorage.STORAGE_KEY); window.location.reload(); }}
+              className="underline hover:text-amber-900 transition-colors"
+            >
+              Exit
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
