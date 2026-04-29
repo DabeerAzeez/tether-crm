@@ -8,3 +8,5 @@ build/
 .resources
 .playwright-mcp/
 test-results/
+*.stackdump
+
