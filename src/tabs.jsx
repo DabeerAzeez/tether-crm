@@ -1434,6 +1434,8 @@ function MapTab() {
 
   const makePinIcon = (L, contact, selected) => {
     let color = colorFor(contact, state.customLabels);
+    const hue = contact.avatar?.hue || 200;
+    const avatarBg = `linear-gradient(135deg, hsl(${hue}, 55%, 55%), hsl(${(hue + 40) % 360}, 55%, 42%))`;
     if (state.demoMode && contact.avatar && contact.avatar.hue != null) {
       color = `hsl(${contact.avatar.hue}, 55%, 55%)`;
     }
@@ -1448,10 +1450,12 @@ function MapTab() {
       .join('')
       .toUpperCase() || '?';
     const isDefaultPhoto = contact.photoUrl && contact.photoUrl.includes('googleusercontent.com/cm/');
-    const inner = (contact.photoUrl && !isDefaultPhoto)
+    const hasPhoto = contact.photoUrl && !isDefaultPhoto;
+    const inner = hasPhoto
       ? `<img src="${contact.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.innerHTML='<span>${initials}</span>';this.parentNode.style.justifyContent='center';" />`
       : `<span>${initials}</span>`;
-    const html = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${selected ? 13 : 10}px;box-shadow:0 2px 8px rgba(0,0,0,.35);${border}transition:all .15s;overflow:hidden">${inner}</div>`;
+    const bgStyle = hasPhoto ? color : avatarBg;
+    const html = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bgStyle};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${selected ? 13 : 10}px;box-shadow:0 2px 8px rgba(0,0,0,.35);${border}transition:all .15s;overflow:hidden">${inner}</div>`;
     return L.divIcon({ html, iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '' });
   };
 

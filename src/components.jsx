@@ -10,10 +10,19 @@ const { Icons } = window.TetherConstants;
 
 const Avatar = ({ contact, size = 40, ring = false }) => {
   const [imgError, setImgError] = useState(false);
-  const { initials, hue } = contact.avatar || { initials: (contact.name || '?').slice(0, 2).toUpperCase(), hue: 200 };
+  const initials = (contact.name || '?')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .split(/\s+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?';
+  const hue = contact.avatar?.hue || 200;
   const ringClass = ring ? 'ring-2 ring-warm-200 ring-offset-2 ring-offset-warm-50' : '';
 
-  if (contact.photoUrl && !imgError) {
+  const isDefaultPhoto = contact.photoUrl && contact.photoUrl.includes('googleusercontent.com/cm/');
+  if (contact.photoUrl && !isDefaultPhoto && !imgError) {
     return (
       <img
         src={contact.photoUrl}
@@ -178,6 +187,49 @@ const Modal = ({ open, onClose, children, title, size = 'md' }) => {
 };
 
 // ───────────────────────────────────────────────────────────────────
+// Label Filter
+// ───────────────────────────────────────────────────────────────────
+
+function LabelFilter({ labels, activeFilter, onFilterChange, onEditLabels }) {
+  if (!labels || labels.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 items-center">
+      <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
+      <button
+        onClick={() => onFilterChange(null)}
+        className={`text-xs px-3 py-1.5 rounded-full transition shadow-sm ${
+          activeFilter == null || activeFilter === ''
+            ? 'bg-sage-600 text-white'
+            : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
+        }`}
+      >
+        All
+      </button>
+      {labels.map((l) => (
+        <button
+          key={l.key}
+          onClick={() => onFilterChange(activeFilter === l.key ? null : l.key)}
+          className={`text-xs px-3 py-1.5 rounded-full transition flex items-center gap-1.5 shadow-sm ${
+            activeFilter === l.key ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
+          }`}
+        >
+          {l.display} <span className="opacity-60 font-mono text-[10px]">{l.count}</span>
+        </button>
+      ))}
+      {onEditLabels && (
+        <button
+          onClick={onEditLabels}
+          className="ml-2 px-3 py-1.5 rounded-full flex items-center justify-center border border-warm-300 bg-surface text-warm-600 hover:bg-warm-50 hover:text-warm-900 transition shadow-sm text-xs gap-1.5"
+          title="Edit labels"
+        >
+          <span className="scale-[0.8]">{Icons.pencil}</span> Edit labels
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
 // Location Autocomplete
 // ───────────────────────────────────────────────────────────────────
 
@@ -291,5 +343,6 @@ window.TetherComponents = {
   LabelMenu,
   SectionHeader,
   Modal,
+  LabelFilter,
   LocationAutocomplete,
 };
