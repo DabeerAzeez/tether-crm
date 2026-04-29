@@ -165,6 +165,9 @@ function SyncProgress() {
 
         let contacts, events;
         let chatThreads = [];
+        let calendarKeywordBlacklist = [];
+        let resolvedEventIds = [];
+        let dismissedEventIds = [];
 
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
@@ -191,6 +194,9 @@ function SyncProgress() {
           const syncRes = await window.TetherGoogle.loadFromDrive(() => { });
           events = syncRes.events;
           chatThreads = syncRes.chatThreads || [];
+          calendarKeywordBlacklist = syncRes.calendarKeywordBlacklist || [];
+          resolvedEventIds = syncRes.resolvedEventIds || [];
+          dismissedEventIds = syncRes.dismissedEventIds || [];
         } else {
           // Regular load from Drive
           const result = await window.TetherGoogle.loadFromDrive(({ label, pct }) => {
@@ -200,6 +206,9 @@ function SyncProgress() {
           contacts = result.contacts;
           events = result.events;
           chatThreads = result.chatThreads || [];
+          calendarKeywordBlacklist = result.calendarKeywordBlacklist || [];
+          resolvedEventIds = result.resolvedEventIds || [];
+          dismissedEventIds = result.dismissedEventIds || [];
         }
 
         // Geocode any contacts missing coordinates
@@ -232,6 +241,9 @@ function SyncProgress() {
           events,
           chatThreads: chatThreads.length > 0 ? chatThreads : (s.chatThreads || []),
           activeThreadId: chatThreads.length > 0 ? chatThreads[chatThreads.length - 1].id : s.activeThreadId,
+          calendarKeywordBlacklist: calendarKeywordBlacklist.length > 0 ? calendarKeywordBlacklist : s.calendarKeywordBlacklist,
+          resolvedEventIds: resolvedEventIds.length > 0 ? resolvedEventIds : s.resolvedEventIds,
+          dismissedEventIds: dismissedEventIds.length > 0 ? dismissedEventIds : s.dismissedEventIds,
           isImporting: false,
           lastSyncAt: new Date().toISOString(),
           phase: 'dashboard',

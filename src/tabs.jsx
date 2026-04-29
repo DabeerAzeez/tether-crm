@@ -4,7 +4,7 @@
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 const { Icons, RESERVED_LABELS, RESERVED_CATEGORIES, MULTI_COLOR, STORAGE_KEY } = window.TetherConstants;
-const { Avatar, Button, Card, LabelPill, Tag, SectionHeader, Modal } = window.TetherComponents;
+const { Avatar, Button, Card, LabelPill, Tag, SectionHeader, Modal, LabelFilter } = window.TetherComponents;
 const { useApp } = window.TetherContext;
 const { useDrawer } = window.TetherDrawer;
 const { getUnresolvedHints, useUnresolvedCount, useStaleCloseCount } = window.TetherSidebar;
@@ -87,7 +87,6 @@ function ReconnectTab() {
                   const overdue = !c._noHistory && c._daysRemaining < 0;
                   const errorState = c._noHistory;
                   const labs = labelsFor(c, state.customLabels);
-                  const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
                   const barColor = errorState ? 'hsl(0, 65%, 48%)' : nudgeDaysColor(c._daysRemaining);
 
                   const lastContactedText = errorState
@@ -129,7 +128,6 @@ function ReconnectTab() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className={`truncate ${emphasized ? 'font-bold text-warm-900' : 'font-medium text-warm-900'}`}>{c.name}</span>
                               {labs.map((x) => <LabelPill key={x.key} label={x} />)}
-                              {googleLabels.map((l) => <Tag key={l} label={l} />)}
                             </div>
                             <div className="text-xs text-warm-600 mt-0.5">
                               {lastContactedText}
@@ -158,53 +156,16 @@ function ReconnectTab() {
 
 function AddToCatchUpModal({ open, onClose }) {
   const { state, setState } = useApp();
-  const [search, setSearch] = useState('');
-  const [filterLabel, setFilterLabel] = useState(null);
-  const [selected, setSelected] = useState(new Set());
   const [nudgeDays, setNudgeDays] = useState(30);
 
   useEffect(() => {
-    if (open) {
-      setSearch('');
-      setFilterLabel(null);
-      setSelected(new Set());
-      setNudgeDays(30);
-    }
+    if (open) setNudgeDays(30);
   }, [open]);
-
-  if (!open) return null;
 
   const eligible = state.contacts.filter((c) => c.nudgeFrequencyDays == null);
 
-  const labelCounts = {};
-  eligible.forEach((c) => {
-    c.googleLabels.filter((l) => !l.startsWith('CRM:')).forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
-    c.crmLabels.forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
-  });
-  const allLabelsList = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
-
-  const visible = eligible.filter((c) => {
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterLabel) {
-      const has = c.googleLabels.includes(filterLabel) || c.crmLabels.includes(filterLabel);
-      if (!has) return false;
-    }
-    return true;
-  });
-
-  const toggleContact = (id) => {
-    setSelected((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
-
-  const selectAllVisible = () => setSelected(new Set(visible.map((c) => c.id)));
-  const clearSelection = () => setSelected(new Set());
-
-  const apply = () => {
-    const ids = Array.from(selected);
+  const apply = (pickedContacts) => {
+    const ids = pickedContacts.map(c => c.id);
     const days = Number(nudgeDays);
     if (ids.length === 0 || !days || days < 1) return;
     setState((s) => ({
@@ -215,82 +176,26 @@ function AddToCatchUpModal({ open, onClose }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Add to Catch Up" size="lg">
-      <div className="p-6 space-y-4">
-        <div className="flex gap-3 items-end flex-wrap">
-          <label className="flex-1 min-w-[200px]">
-            <span className="text-xs text-warm-600">Search</span>
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search contacts…"
-              className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
-          </label>
-          <label>
-            <span className="text-xs text-warm-600">Nudge every</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input type="number" min="1" value={nudgeDays}
-                onChange={(e) => setNudgeDays(e.target.value)}
-                className="w-20 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
-              <span className="text-sm text-warm-600">days</span>
-            </div>
-          </label>
-        </div>
-
-        {allLabelsList.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
-            <button onClick={() => setFilterLabel(null)}
-              className={`text-xs px-2 py-1 rounded-full transition ${filterLabel == null ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
-              All
-            </button>
-            {allLabelsList.map((l) => (
-              <button key={l} onClick={() => setFilterLabel(filterLabel === l ? null : l)}
-                className={`text-xs px-2 py-1 rounded-full transition ${filterLabel === l ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
-                {l.replace(/^CRM:\s*/, '')} <span className="opacity-60">· {labelCounts[l]}</span>
-              </button>
-            ))}
+    <ContactPickerModal
+      open={open}
+      onClose={onClose}
+      title="Add to Catch Up"
+      eligibleContacts={eligible}
+      onPick={apply}
+      submitText="Add"
+      disableSubmit={!nudgeDays || nudgeDays < 1}
+      extraTopContent={
+        <label>
+          <span className="text-xs text-warm-600">Nudge every</span>
+          <div className="mt-1 flex items-center gap-2">
+            <input type="number" min="1" value={nudgeDays}
+              onChange={(e) => setNudgeDays(e.target.value)}
+              className="w-20 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
+            <span className="text-sm text-warm-600">days</span>
           </div>
-        )}
-
-        <div className="flex items-center justify-between text-xs text-warm-600">
-          <span>{visible.length} matching · {selected.size} selected</span>
-          <div className="flex gap-3">
-            <button onClick={selectAllVisible} className="underline hover:text-warm-900" disabled={visible.length === 0}>Select all visible</button>
-            {selected.size > 0 && <button onClick={clearSelection} className="underline hover:text-warm-900">Clear</button>}
-          </div>
-        </div>
-
-        <div className="max-h-[40vh] overflow-y-auto border border-warm-200 rounded-lg divide-y divide-warm-100 bg-surface">
-          {visible.length === 0 && <div className="p-4 text-sm text-warm-600 italic">No contacts match.</div>}
-          {visible.map((c) => {
-            const isSelected = selected.has(c.id);
-            const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
-            return (
-              <button key={c.id} onClick={() => toggleContact(c.id)}
-                className={`w-full flex items-center gap-3 p-3 text-left transition ${isSelected ? 'bg-sage-50' : 'hover:bg-warm-50'}`}>
-                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-sage-500 border-sage-500' : 'border-warm-300'}`}>
-                  {isSelected && <div className="text-white scale-75">{Icons.check}</div>}
-                </div>
-                <Avatar contact={c} size={36} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
-                  <div className="text-xs text-warm-600 truncate">
-                    {googleLabels.slice(0, 4).join(', ')}
-                    {c.location?.city && `${googleLabels.length ? ' · ' : ''}${c.location.city}`}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-warm-200">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={apply} disabled={selected.size === 0 || !nudgeDays || nudgeDays < 1}>
-            Add {selected.size > 0 ? `${selected.size} ` : ''}{selected.size === 1 ? 'contact' : 'contacts'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+        </label>
+      }
+    />
   );
 }
 
@@ -678,43 +583,21 @@ function AllContactsTab() {
           </div>
 
           {allLabels.length > 0 && !isTrashMode && (
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
-              <button
-                onClick={() => setFilter(null)}
-                className={`text-xs px-3 py-1.5 rounded-full transition ${filter == null || filter === ''
-                  ? 'bg-sage-600 text-white shadow-sm'
-                  : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
-                  }`}
-              >
-                All
-              </button>
-              {allLabels.map((l) => {
-                const count = state.contacts.filter(
+            <LabelFilter
+              labels={allLabels.map((l) => ({
+                key: l.key,
+                display: l.label.replace(/^CRM:\s*/, ''),
+                count: state.contacts.filter(
                   (c) =>
                     !c.isDeleted &&
                     (c.crmLabels.some((lbl) => lbl.toLowerCase().includes(l.label.replace(/^CRM:\s*/i, '').trim().toLowerCase())) ||
                       c.googleLabels.some((lbl) => lbl.toLowerCase().includes(l.label.replace(/^CRM:\s*/i, '').trim().toLowerCase())))
-                ).length;
-                return (
-                  <button
-                    key={l.key}
-                    onClick={() => setFilter(filter === l.key ? null : l.key)}
-                    className={`text-xs px-3 py-1.5 rounded-full transition flex items-center gap-1.5 ${filter === l.key ? 'bg-sage-600 text-white shadow-sm' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
-                      }`}
-                  >
-                    {l.label.replace(/^CRM:\s*/, '')} <span className="opacity-60 font-mono text-[10px]">{count}</span>
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => setEditLabelsOpen(true)}
-                className="ml-2 px-3 py-1.5 rounded-full flex items-center justify-center border border-warm-300 bg-surface text-warm-600 hover:bg-warm-50 hover:text-warm-900 transition shadow-sm text-xs gap-1.5"
-                title="Edit labels"
-              >
-                <span className="scale-[0.8]">{Icons.pencil}</span> Edit labels
-              </button>
-            </div>
+                ).length
+              }))}
+              activeFilter={filter}
+              onFilterChange={setFilter}
+              onEditLabels={() => setEditLabelsOpen(true)}
+            />
           )}
 
           <Card className="overflow-hidden">
@@ -1186,7 +1069,20 @@ function AddGuestButton({ event }) {
           </div>
         </>
       )}
-      {pickerOpen && <ContactPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} excludeEmails={event.guestEmails || []} onPick={(pickedContacts) => { pickedContacts.forEach(c => addGuestToEvent(event.id, c.id)); setPickerOpen(false); }} />}
+      {pickerOpen && (
+        <ContactPickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          eligibleContacts={state.contacts.filter(c => {
+            const excluded = new Set((event.guestEmails || []).map(e => e.toLowerCase()));
+            const syntheticEmail = `${c.id}@contact.local`.toLowerCase();
+            const hasEmail = c.email && excluded.has(c.email.toLowerCase());
+            const hasSynthetic = excluded.has(syntheticEmail);
+            return !hasEmail && !hasSynthetic;
+          })}
+          onPick={(pickedContacts) => { pickedContacts.forEach(c => addGuestToEvent(event.id, c.id)); setPickerOpen(false); }}
+        />
+      )}
     </div>
   );
 }
@@ -1261,13 +1157,34 @@ function UnresolvedChip({ event, hint, onConfirm, onDismiss }) {
           </div>
         </>
       )}
-      {pickerOpen && <ContactPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} excludeEmails={event.guestEmails || []} onPick={(pickedContacts) => { pickedContacts.forEach(c => onConfirm(c.id)); setPickerOpen(false); }} />}
+      {pickerOpen && (
+        <ContactPickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          eligibleContacts={state.contacts.filter(c => {
+            const excluded = new Set((event.guestEmails || []).map(e => e.toLowerCase()));
+            const syntheticEmail = `${c.id}@contact.local`.toLowerCase();
+            const hasEmail = c.email && excluded.has(c.email.toLowerCase());
+            const hasSynthetic = excluded.has(syntheticEmail);
+            return !hasEmail && !hasSynthetic;
+          })}
+          onPick={(pickedContacts) => { pickedContacts.forEach(c => onConfirm(c.id)); setPickerOpen(false); }}
+        />
+      )}
     </div>
   );
 }
 
-function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
-  const { state } = useApp();
+function ContactPickerModal({
+  open,
+  onClose,
+  title = "Select Contacts",
+  eligibleContacts = [],
+  onPick,
+  submitText = "Done",
+  disableSubmit = false,
+  extraTopContent = null,
+}) {
   const [search, setSearch] = useState('');
   const [filterLabel, setFilterLabel] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -1282,22 +1199,16 @@ function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
 
   if (!open) return null;
 
-  const excluded = new Set((excludeEmails || []).map(e => e.toLowerCase()));
-  const eligible = state.contacts.filter(c => {
-    const syntheticEmail = `${c.id}@contact.local`.toLowerCase();
-    const hasEmail = c.email && excluded.has(c.email.toLowerCase());
-    const hasSynthetic = excluded.has(syntheticEmail);
-    return !hasEmail && !hasSynthetic;
-  });
-
   const labelCounts = {};
-  eligible.forEach((c) => {
+  eligibleContacts.forEach((c) => {
     c.googleLabels.filter((l) => !l.startsWith('CRM:')).forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
     c.crmLabels.forEach((l) => { labelCounts[l] = (labelCounts[l] || 0) + 1; });
   });
-  const allLabelsList = Object.keys(labelCounts).sort((a, b) => labelCounts[b] - labelCounts[a]);
+  const allLabelsList = Object.keys(labelCounts)
+    .sort((a, b) => labelCounts[b] - labelCounts[a])
+    .map(l => ({ key: l, display: l.replace(/^CRM:\s*/, ''), count: labelCounts[l] }));
 
-  const visible = eligible.filter((c) => {
+  const visible = eligibleContacts.filter((c) => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterLabel) {
       const has = c.googleLabels.includes(filterLabel) || c.crmLabels.includes(filterLabel);
@@ -1314,8 +1225,16 @@ function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
     });
   };
 
+  const selectAllVisible = () => setSelectedIds(new Set(visible.map((c) => c.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleSubmit = () => {
+    const picked = Array.from(selectedIds).map(id => eligibleContacts.find(c => c.id === id)).filter(Boolean);
+    onPick(picked);
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title="Select Contacts" size="lg">
+    <Modal open={open} onClose={onClose} title={title} size="lg">
       <div className="p-6 space-y-4">
         <div className="flex gap-3 items-end flex-wrap">
           <label className="flex-1 min-w-[200px]">
@@ -1324,26 +1243,17 @@ function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
               placeholder="Search contacts…" autoFocus
               className="w-full mt-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface" />
           </label>
+          {extraTopContent}
         </div>
 
-        {allLabelsList.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs text-warm-600 mr-1">Filter by label:</span>
-            <button onClick={() => setFilterLabel(null)}
-              className={`text-xs px-2 py-1 rounded-full transition ${filterLabel == null ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
-              All
-            </button>
-            {allLabelsList.map((l) => (
-              <button key={l} onClick={() => setFilterLabel(filterLabel === l ? null : l)}
-                className={`text-xs px-2 py-1 rounded-full transition ${filterLabel === l ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}>
-                {l.replace(/^CRM:\s*/, '')} <span className="opacity-60">· {labelCounts[l]}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <LabelFilter labels={allLabelsList} activeFilter={filterLabel} onFilterChange={setFilterLabel} />
 
         <div className="flex items-center justify-between text-xs text-warm-600">
-          <span>{visible.length} matching ({selectedIds.size} selected)</span>
+          <span>{visible.length} matching · {selectedIds.size} selected</span>
+          <div className="flex gap-3">
+            <button onClick={selectAllVisible} className="underline hover:text-warm-900" disabled={visible.length === 0}>Select all visible</button>
+            {selectedIds.size > 0 && <button onClick={clearSelection} className="underline hover:text-warm-900">Clear</button>}
+          </div>
         </div>
 
         <div className="max-h-[40vh] overflow-y-auto border border-warm-200 rounded-lg divide-y divide-warm-100 bg-surface">
@@ -1352,9 +1262,11 @@ function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
             const googleLabels = c.googleLabels.filter((l) => !l.startsWith('CRM:'));
             const isSelected = selectedIds.has(c.id);
             return (
-              <div key={c.id} onClick={() => toggleSelect(c.id)}
-                className={`w-full flex items-center gap-3 p-3 text-left transition hover:bg-warm-50 cursor-pointer ${isSelected ? 'bg-sage-50/80 border-l-4 border-sage-500' : ''}`}>
-                <input type="checkbox" checked={isSelected} readOnly className="rounded text-sage-600 focus:ring-sage-500" />
+              <button key={c.id} onClick={() => toggleSelect(c.id)}
+                className={`w-full flex items-center gap-3 p-3 text-left transition ${isSelected ? 'bg-sage-50' : 'hover:bg-warm-50'}`}>
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-sage-500 border-sage-500' : 'border-warm-300'}`}>
+                  {isSelected && <div className="text-white scale-75">{Icons.check}</div>}
+                </div>
                 <Avatar contact={c} size={36} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-warm-900 truncate">{c.name}</div>
@@ -1363,14 +1275,16 @@ function ContactPickerModal({ open, onClose, onPick, excludeEmails }) {
                     {c.location?.city && `${googleLabels.length ? ' · ' : ''}${c.location.city}`}
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-warm-200">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => { onPick(Array.from(selectedIds).map(id => state.contacts.find(c => c.id === id)).filter(Boolean)); onClose(); }} disabled={selectedIds.size === 0}>Done</Button>
+          <Button onClick={handleSubmit} disabled={selectedIds.size === 0 || disableSubmit}>
+            {submitText} {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+          </Button>
         </div>
       </div>
     </Modal>
@@ -1472,21 +1386,29 @@ function AddManualEventModal({ open, onClose }) {
 // ───────────────────────────────────────────────────────────────────
 
 function MapTab() {
-  const { state, updateContact } = useApp();
-  const { open: openDrawer, openLog } = useDrawer();
+  const { state, updateContact, allLabels } = useApp();
+  const { open: openDrawer } = useDrawer();
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
   const tileLayerRef = useRef(null);
-  const markersRef = useRef({}); // keyed by contact id
+  const markersRef = useRef({});
   const dropPinRef = useRef(null);
+  const circleRef = useRef(null);
   const [droppedLatLng, setDroppedLatLng] = useState(null);
-  const [sort, setSort] = useState('closest');
+  const [sort, setSort] = useState('name');
+  const sortRef = useRef(sort);
+  useEffect(() => { sortRef.current = sort; }, [sort]);
+  const [sortOpen, setSortOpen] = useState(false);
   const [radiusKm, setRadiusKm] = useState(500);
   const [filterKey, setFilterKey] = useState('');
   const [selectedId, setSelectedId] = useState(null);
-  const [locInput, setLocInput] = useState('');
-  const [locBusy, setLocBusy] = useState(false);
-  const [locErr, setLocErr] = useState('');
+
+  const sortOptions = [
+    { value: 'name', label: 'A → Z' },
+    { value: 'closest', label: 'Closest first' },
+    { value: 'recent', label: 'Recently contacted' },
+    { value: 'stale', label: 'Least recently contacted' },
+  ];
 
   if (state.contacts.length === 0) {
     return (
@@ -1510,16 +1432,25 @@ function MapTab() {
     );
   }
 
-  const selectedContact = selectedId ? state.contacts.find((c) => c.id === selectedId) : null;
-  const hasPin = selectedContact && selectedContact.location && selectedContact.location.lat != null;
-
   const makePinIcon = (L, contact, selected) => {
-    const color = colorFor(contact, state.customLabels);
+    let color = colorFor(contact, state.customLabels);
+    if (state.demoMode && contact.avatar && contact.avatar.hue != null) {
+      color = `hsl(${contact.avatar.hue}, 55%, 55%)`;
+    }
     const size = selected ? 38 : 28;
     const border = selected ? 'border:3px solid white;box-shadow:0 0 0 2px ' + color + ';' : '';
-    const inner = contact.photoUrl
-      ? `<img src="${contact.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.innerHTML='<span>${contact.avatar.initials}</span>';this.parentNode.style.justifyContent='center';" />`
-      : `<span>${contact.avatar.initials}</span>`;
+    const initials = (contact.name || '?')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .split(/\s+/)
+      .map((s) => s[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || '?';
+    const isDefaultPhoto = contact.photoUrl && contact.photoUrl.includes('googleusercontent.com/cm/');
+    const inner = (contact.photoUrl && !isDefaultPhoto)
+      ? `<img src="${contact.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.innerHTML='<span>${initials}</span>';this.parentNode.style.justifyContent='center';" />`
+      : `<span>${initials}</span>`;
     const html = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:${selected ? 13 : 10}px;box-shadow:0 2px 8px rgba(0,0,0,.35);${border}transition:all .15s;overflow:hidden">${inner}</div>`;
     return L.divIcon({ html, iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: '' });
   };
@@ -1533,8 +1464,12 @@ function MapTab() {
     const initTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 });
     initTile.addTo(map);
     tileLayerRef.current = initTile;
-    map.on('click', () => { setDroppedLatLng((prev) => prev); setSelectedId(null); });
-    map.on('click', (e) => setDroppedLatLng({ lat: e.latlng.lat, lng: e.latlng.lng }));
+    map.on('click', (e) => {
+      if (sortRef.current !== 'name') {
+        setDroppedLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
+        setSelectedId(null);
+      }
+    });
     leafletRef.current = map;
 
     // Fix for grey tiles / incorrect centering on initial mount or container resize
@@ -1581,18 +1516,19 @@ function MapTab() {
     if (!map) return;
     Object.values(markersRef.current).forEach((m) => map.removeLayer(m));
     markersRef.current = {};
-    const filterCat = [...RESERVED_LABELS, ...state.customLabels].find((c) => c.key === filterKey);
+    const filterCat = allLabels.find((c) => c.key === filterKey);
     state.contacts.forEach((c) => {
+      if (c.isDeleted) return;
       if (!c.location || c.location.lat == null || c.location.lng == null) return;
-      if (filterCat && !c.crmLabels.includes(filterCat.label)) return;
+      if (filterCat && !c.crmLabels.includes(filterCat.label) && !c.googleLabels.includes(filterCat.label)) return;
       const isSelected = c.id === selectedId;
       const icon = makePinIcon(L, c, isSelected);
       const marker = L.marker([c.location.lat, c.location.lng], { icon, zIndexOffset: isSelected ? 1000 : 0 })
-        .on('click', (e) => { window.L.DomEvent.stopPropagation(e); setSelectedId((prev) => prev === c.id ? null : c.id); });
+        .on('click', (e) => { window.L.DomEvent.stopPropagation(e); setSelectedId(c.id); openDrawer(c.id); });
       marker.addTo(map);
       markersRef.current[c.id] = marker;
     });
-  }, [state.contacts, state.customLabels, filterKey, selectedId]);
+  }, [state.contacts, allLabels, filterKey, selectedId]);
 
   // Pan to selected contact when selection changes
   useEffect(() => {
@@ -1603,6 +1539,13 @@ function MapTab() {
     }
   }, [selectedId]);
 
+  // Clear dropped pins when sorting changes to A to Z
+  useEffect(() => {
+    if (sort === 'name') {
+      setDroppedLatLng(null);
+    }
+  }, [sort]);
+
   // Drop-pin marker
   useEffect(() => {
     const L = window.L;
@@ -1611,12 +1554,30 @@ function MapTab() {
     if (dropPinRef.current) { map.removeLayer(dropPinRef.current); dropPinRef.current = null; }
     if (droppedLatLng) {
       const icon = L.divIcon({
-        html: `<div style="width:20px;height:20px;border-radius:50%;background:#2e231b;border:3px solid #fbf8f4;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`,
+        html: `<div style="width:20px;height:20px;border-radius:50%;background:#63854e;border:3px solid #fbf8f4;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`,
         iconSize: [20, 20], iconAnchor: [10, 10], className: '',
       });
       dropPinRef.current = L.marker([droppedLatLng.lat, droppedLatLng.lng], { icon }).addTo(map);
     }
   }, [droppedLatLng]);
+
+  // Radius circle — shown when a pin is dropped and sort is radius-based
+  useEffect(() => {
+    const L = window.L;
+    const map = leafletRef.current;
+    if (!map) return;
+    if (circleRef.current) { map.removeLayer(circleRef.current); circleRef.current = null; }
+    if (droppedLatLng && sort !== 'closest' && sort !== 'name') {
+      circleRef.current = L.circle([droppedLatLng.lat, droppedLatLng.lng], {
+        radius: radiusKm * 1000,
+        color: '#7db88f',
+        fillColor: '#5a7c65',
+        fillOpacity: 0.10,
+        weight: 2,
+        dashArray: '8 5',
+      }).addTo(map);
+    }
+  }, [droppedLatLng, sort, radiusKm]);
 
   // mapFocus from Ask tab
   useEffect(() => {
@@ -1633,57 +1594,45 @@ function MapTab() {
     return 2 * R * Math.asin(Math.sqrt(x));
   };
 
-  const geocode = async (query) => {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, { headers: { 'Accept-Language': 'en' } });
-    const data = await r.json();
-    if (data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
-    return null;
+  const logScale = (val) => {
+    if (val === 0) return 0;
+    return Math.round(Math.pow(10, (val / 100) * Math.log10(5000)));
   };
 
-  const saveLocation = async () => {
-    if (!locInput.trim() || !selectedContact) return;
-    setLocBusy(true); setLocErr('');
-    try {
-      const result = await geocode(locInput.trim());
-      if (!result) { setLocErr('Location not found. Try a more specific name.'); return; }
-      const parts = result.display.split(',');
-      const city = parts[0].trim();
-      const country = parts[parts.length - 1].trim();
-      updateContact(selectedContact.id, { location: { city, country, lat: result.lat, lng: result.lng, raw: result.display } });
-      setLocInput(''); setLocErr('');
-    } catch (e) { setLocErr('Geocoding failed. Check your connection.'); }
-    finally { setLocBusy(false); }
+  const invLogScale = (rad) => {
+    if (rad <= 0) return 0;
+    return (Math.log10(rad) / Math.log10(5000)) * 100;
   };
 
   const sidebarContacts = useMemo(() => {
-    let r = state.contacts.filter((c) => c.location && c.location.lat != null);
+    let r = state.contacts.filter((c) => c.location && c.location.lat != null && !c.isDeleted);
     if (filterKey) {
-      const cat = [...RESERVED_LABELS, ...state.customLabels].find((x) => x.key === filterKey);
+      const cat = allLabels.find((x) => x.key === filterKey);
       if (cat) r = r.filter((c) => labelsFor(c).some(l => l.label === cat.label));
     }
     if (droppedLatLng) {
-      if (sort === 'closest') {
-        r = r.map((c) => ({ c, d: distKm(c.location, droppedLatLng) })).sort((a, b) => a.d - b.d);
-      } else {
-        r = r.map((c) => ({ c, d: distKm(c.location, droppedLatLng) })).filter((x) => x.d <= radiusKm);
-        if (sort === 'recentRadius') r.sort((a, b) => a.c.lastContactedDaysAgo - b.c.lastContactedDaysAgo);
-        if (sort === 'staleRadius') r.sort((a, b) => b.c.lastContactedDaysAgo - a.c.lastContactedDaysAgo);
-      }
-      r = r.slice(0, 20).map((x) => ({ ...x.c, _dist: x.d }));
+      r = r.map((c) => ({ ...c, _dist: distKm(c.location, droppedLatLng) }));
+      if (sort === 'recent' || sort === 'stale') r = r.filter((x) => x._dist <= radiusKm);
+      if (sort === 'closest') r.sort((a, b) => a._dist - b._dist);
+      else if (sort === 'recent') r.sort((a, b) => (a.lastContactedDaysAgo ?? 9999) - (b.lastContactedDaysAgo ?? 9999));
+      else if (sort === 'stale') r.sort((a, b) => (b.lastContactedDaysAgo ?? 9999) - (a.lastContactedDaysAgo ?? 9999));
+      else r.sort((a, b) => a.name.localeCompare(b.name));
     } else {
-      r = [...r].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 30);
+      if (sort === 'recent') r = [...r].sort((a, b) => (a.lastContactedDaysAgo ?? 9999) - (b.lastContactedDaysAgo ?? 9999));
+      else if (sort === 'stale') r = [...r].sort((a, b) => (b.lastContactedDaysAgo ?? 9999) - (a.lastContactedDaysAgo ?? 9999));
+      else r = [...r].sort((a, b) => a.name.localeCompare(b.name));
     }
-    return r;
-  }, [state.contacts, state.customLabels, droppedLatLng, sort, radiusKm, filterKey]);
+    return r.slice(0, droppedLatLng ? 20 : 30);
+  }, [state.contacts, allLabels, droppedLatLng, sort, radiusKm, filterKey]);
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex" onClick={() => setSortOpen(false)}>
       {/* Map */}
       <div className="flex-1 relative">
         <div ref={mapRef} className="absolute inset-0" />
-        {!droppedLatLng && !selectedId && (
+        {!droppedLatLng && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-warm-900/90 text-warm-50 px-4 py-2 rounded-xl text-sm shadow-lg pointer-events-none">
-            Click a pin or contact to select · click the map to drop a reference pin
+            Click the map to drop a reference pin · click a pin to open a contact
           </div>
         )}
       </div>
@@ -1691,91 +1640,96 @@ function MapTab() {
       {/* Sidebar */}
       <aside className="w-80 shrink-0 border-l border-warm-200 bg-warm-50 flex flex-col">
 
-        {/* Filters */}
+        {/* Settings panel */}
         <div className="p-4 border-b border-warm-200 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-serif text-xl text-warm-900">Map</h2>
-            {selectedId && <button onClick={() => setSelectedId(null)} className="text-warm-500 hover:text-warm-900 text-xl font-light leading-none">×</button>}
-          </div>
-          <select value={filterKey} onChange={(e) => setFilterKey(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm">
-            <option value="">All labels</option>
-            {RESERVED_LABELS.concat(state.customLabels || []).map((c) => <option key={c.key} value={c.key}>{c.label.replace(/^CRM:\s*/i, '')}</option>)}
-          </select>
-          {droppedLatLng && (
-            <>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm">
-                <option value="closest">Sort: Closest first</option>
-                <option value="recentRadius">Sort: Recently contacted within radius</option>
-                <option value="staleRadius">Sort: Least recently contacted within radius</option>
-              </select>
-              {sort !== 'closest' && (
-                <div>
-                  <label className="text-xs text-warm-700">Radius: {radiusKm} km</label>
-                  <input type="range" min="10" max="2000" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="w-full" />
-                </div>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => setDroppedLatLng(null)} className="w-full">Clear dropped pin</Button>
-            </>
-          )}
-        </div>
+          <h2 className="font-serif text-xl text-warm-900">Map</h2>
 
-        {/* Inline contact panel — no overlay, stays in sidebar */}
-        {selectedContact && (
-          <div className="border-b border-warm-200 bg-surface p-4 space-y-3 animate-slide-up">
-            <div className="flex items-start gap-3">
-              <Avatar contact={selectedContact} size={44} ring />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-warm-900 truncate">{selectedContact.name}</div>
-                <div className="text-xs text-warm-600 truncate mt-0.5">{selectedContact.email || selectedContact.phone || '—'}</div>
-                <div className="text-xs text-warm-500 mt-0.5">Last contacted {relativeDate(selectedContact.lastContactedAt)}</div>
-              </div>
-            </div>
-
-            {hasPin ? (
-              <div className="text-xs text-warm-700 bg-warm-50 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(selectedContact, state.customLabels) }} />
-                {selectedContact.location.city}{selectedContact.location.country ? `, ${selectedContact.location.country}` : ''}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  No map pin — this contact won't appear on the map. Add a location to place them.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    value={locInput}
-                    onChange={(e) => setLocInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && saveLocation()}
-                    placeholder="e.g. Toronto, Canada"
-                    className="flex-1 px-2 py-1.5 rounded-lg border border-warm-300 bg-warm-50 text-xs"
-                  />
-                  <Button size="sm" onClick={saveLocation} disabled={locBusy || !locInput.trim()}>
-                    {locBusy ? '…' : 'Set'}
-                  </Button>
-                </div>
-                {locErr && <p className="text-xs text-red-700">{locErr}</p>}
+          {/* Sort by dropdown */}
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSortOpen((o) => !o)}
+              className="flex items-center gap-1.5 text-sm text-warm-700 hover:text-warm-900 transition"
+            >
+              <span className="text-warm-500">Sort by:</span>
+              <span className="font-semibold text-warm-900">{sortOptions.find((o) => o.value === sort)?.label}</span>
+              <span className="text-warm-400 text-[10px] ml-0.5">▼</span>
+            </button>
+            {sortOpen && (
+              <div className="absolute top-full left-0 mt-1.5 z-50 bg-surface border border-warm-200 rounded-xl shadow-xl py-1.5 min-w-[220px]">
+                {sortOptions.map((o) => (
+                  <button
+                    key={o.value}
+                    onClick={() => { setSort(o.value); setSortOpen(false); }}
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-warm-50 text-warm-800 transition"
+                  >
+                    {o.label}
+                    {sort === o.value && <span className="text-sage-600 font-bold">✓</span>}
+                  </button>
+                ))}
               </div>
             )}
-
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="secondary" onClick={() => openLog(selectedContact.id)} className="flex-1">Add an interaction</Button>
-              <Button size="sm" variant="outline" onClick={() => { openDrawer(selectedContact.id); setSelectedId(null); }} className="flex-1">Full profile</Button>
-            </div>
           </div>
-        )}
+
+          {/* Label filter pills */}
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setFilterKey('')}
+              className={`text-xs px-2.5 py-1 rounded-full transition ${!filterKey ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}
+            >All</button>
+            {allLabels.map((l) => (
+              <button
+                key={l.key}
+                onClick={() => setFilterKey(filterKey === l.key ? '' : l.key)}
+                className={`text-xs px-2.5 py-1 rounded-full transition ${filterKey === l.key ? 'bg-sage-600 text-white' : 'bg-warm-100 text-warm-700 hover:bg-warm-200'}`}
+              >
+                {l.label.replace(/^CRM:\s*/, '')}
+              </button>
+            ))}
+          </div>
+
+          {/* Radius slider — only when pin is dropped and using a radius-based sort */}
+          {droppedLatLng && sort !== 'closest' && sort !== 'name' && (
+            <div>
+              <label className="text-xs text-warm-700">Radius: {radiusKm} km</label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={invLogScale(radiusKm)}
+                onChange={(e) => setRadiusKm(logScale(Number(e.target.value)))}
+                className="w-full mt-1"
+                style={{ accentColor: '#5a7c65' }}
+              />
+            </div>
+          )}
+
+          {/* Clear dropped pin */}
+          {droppedLatLng && sort !== 'name' && (
+            <Button size="sm" variant="ghost" onClick={() => setDroppedLatLng(null)} className="w-full">
+              Clear dropped pin
+            </Button>
+          )}
+        </div>
 
         {/* Contact list */}
         <div className="flex-1 overflow-y-auto divide-y divide-warm-100">
           {sidebarContacts.length === 0 && (
             <div className="p-4 text-sm text-warm-600 italic">
-              {droppedLatLng ? 'No contacts in range. Increase the radius or clear the filter.' : 'No contacts with map locations yet. Select a contact without a location to add one.'}
+              {(() => {
+                const totalWithLoc = state.contacts.filter(c => !c.isDeleted && c.location && c.location.lat != null).length;
+                const totalMatchingFilter = state.contacts.filter(c => !c.isDeleted && c.location && c.location.lat != null && (!filterKey || labelsFor(c).some(l => l.key === filterKey))).length;
+                if (totalWithLoc === 0) return 'No contacts with map locations yet.';
+                if (totalMatchingFilter === 0) return 'No contacts matching this filter have map pins.';
+                return 'No contacts in range. Increase the radius or clear the filter.';
+              })()}
             </div>
           )}
           {sidebarContacts.map((c) => {
             const isSelected = c.id === selectedId;
             return (
               <button key={c.id}
-                onClick={() => setSelectedId((prev) => prev === c.id ? null : c.id)}
+                onClick={() => openDrawer(c.id)}
                 className={`w-full flex items-center gap-3 p-3 text-left transition ${isSelected ? 'bg-sage-50 border-l-2 border-sage-500 pl-[10px]' : 'hover:bg-warm-100 border-l-2 border-transparent'}`}
               >
                 <Avatar contact={c} size={32} />
@@ -1787,7 +1741,6 @@ function MapTab() {
                     {` · ${relativeDate(c.lastContactedAt)}`}
                   </div>
                 </div>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(c, state.customLabels) }} />
               </button>
             );
           })}
@@ -2051,13 +2004,10 @@ function AskTab() {
           </div>
         </Card>
       ) : showSetup ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="max-w-md w-full p-8 text-center">
-            <h2 className="font-serif text-2xl text-warm-900 mb-2">Connect Ollama to start chatting</h2>
-            <p className="text-warm-700 mb-6">Configure your Ollama endpoint in Settings and hit <strong>Test &amp; Save</strong> to verify the connection.</p>
-            <Button onClick={() => setState((s) => ({ ...s, activeTab: 'settings' }))}>Open Settings</Button>
+        <Card className="flex flex-col items-center justify-center min-h-[288px] text-center p-8">
+            <p className="text-warm-700 mb-6">Configure your LLM provider (Ollama, Gemini, etc.) in Settings to enable chat features.</p>
+            <Button onClick={() => { setState((s) => ({ ...s, activeTab: 'settings' })); setTimeout(() => document.getElementById('llm-config')?.scrollIntoView({ behavior: 'smooth' }), 0); }}>Open Settings</Button>
           </Card>
-        </div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0 bg-warm-50/50 rounded-2xl border border-warm-200 overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -2169,6 +2119,28 @@ function SettingsTab() {
   const [deleteMsg, setDeleteMsg] = useState('');
 
   const updateNudges = (patch) => setState((s) => ({ ...s, nudges: { ...s.nudges, ...patch } }));
+
+  const updateBlacklist = (newList) => {
+    setState((s) => {
+      const next = { ...s, calendarKeywordBlacklist: newList };
+      if (!s.demoMode && window.TetherGoogle?.hasToken()) {
+        window.TetherGoogle.saveAppData({
+          contacts: next.contacts,
+          chatThreads: next.chatThreads || [],
+          settings: {
+            theme: next.theme,
+            llm: next.llm,
+            walkthroughDone: next.walkthroughDone,
+            calendarKeywordBlacklist: next.calendarKeywordBlacklist || [],
+            resolvedEventIds: next.resolvedEventIds || [],
+            dismissedEventIds: next.dismissedEventIds || [],
+          },
+          nudges: next.nudges,
+        }).catch((e) => console.error('[Tether] Blacklist save failed:', e));
+      }
+      return next;
+    });
+  };
 
   const [llmDraft, setLlmDraft] = useState({
     provider: state.llm?.provider || 'ollama',
@@ -2357,7 +2329,7 @@ function SettingsTab() {
       </Card>
 
       {/* LLM */}
-      <Card className="p-6 space-y-4">
+      <Card id="llm-config" className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">LLM config</h3>
         <div>
           <span className="text-xs text-warm-600">Provider</span>
@@ -2446,7 +2418,7 @@ function SettingsTab() {
           {(state.calendarKeywordBlacklist || []).map((kw, i) => (
             <div key={i} className="flex items-center gap-1.5 px-3 py-1 bg-warm-100 text-warm-900 text-sm rounded-full border border-warm-200">
               <span>{kw}</span>
-              <button onClick={() => setState(s => ({ ...s, calendarKeywordBlacklist: s.calendarKeywordBlacklist.filter((_, idx) => idx !== i) }))} className="text-warm-500 hover:text-warm-900 ml-1 leading-none">&times;</button>
+              <button onClick={() => updateBlacklist(state.calendarKeywordBlacklist.filter((_, idx) => idx !== i))} className="text-warm-500 hover:text-warm-900 ml-1 leading-none">&times;</button>
             </div>
           ))}
           {(state.calendarKeywordBlacklist || []).length === 0 && <span className="text-sm text-warm-500 italic">No keywords blacklisted.</span>}
@@ -2459,7 +2431,7 @@ function SettingsTab() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && e.target.value.trim()) {
                 const val = e.target.value.trim();
-                setState(s => ({ ...s, calendarKeywordBlacklist: [...(s.calendarKeywordBlacklist || []), val] }));
+                updateBlacklist([...(state.calendarKeywordBlacklist || []), val]);
                 e.target.value = '';
               }
             }}
@@ -2467,7 +2439,7 @@ function SettingsTab() {
           <Button size="sm" onClick={() => {
             const input = document.getElementById('newKeywordInput');
             if (input && input.value.trim()) {
-              setState(s => ({ ...s, calendarKeywordBlacklist: [...(s.calendarKeywordBlacklist || []), input.value.trim()] }));
+              updateBlacklist([...(state.calendarKeywordBlacklist || []), input.value.trim()]);
               input.value = '';
             }
           }}>Add</Button>
@@ -2489,6 +2461,7 @@ function SettingsTab() {
                 theme: state.theme,
                 llm: state.llm,
                 walkthroughDone: state.walkthroughDone,
+                calendarKeywordBlacklist: state.calendarKeywordBlacklist || [],
               },
               nudges: state.nudges,
               exportedAt: new Date().toISOString()
