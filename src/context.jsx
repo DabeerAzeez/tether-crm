@@ -4,14 +4,14 @@
 const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
 
 const { STORAGE_KEY, RESERVED_LABELS } = window.TetherConstants;
-const { loadState, saveState, defaultState } = window.TetherStorage;
+const { loadState, saveState, defaultState, loadLlmConfig } = window.TetherStorage;
 const { loadClientId } = window.TetherConstants;
 
 // Helper re-imports from TetherHelpers (loaded via helpers.js)
 const { daysSince, uid, labelsFor, generateThreadName, trimMessages } = window.TetherHelpers;
 
-const MAX_THREADS = 3;
-const MAX_PERSISTED_MESSAGES = 15;
+const MAX_THREADS = 20;
+const MAX_PERSISTED_MESSAGES = 100;
 
 // ───────────────────────────────────────────────────────────────────
 // App context
@@ -23,7 +23,13 @@ const useApp = () => useContext(AppCtx);
 function AppProvider({ children }) {
   const [state, setStateRaw] = useState(() => {
     const loaded = loadState();
-    return loaded || defaultState();
+    const base = loaded || defaultState();
+    // Restore LLM config from its own key — survives sign-out (unlink never wipes LLM_KEY)
+    if (!base.llm?.apiKey && !base.llm?.connected) {
+      const savedLlm = loadLlmConfig();
+      if (savedLlm) return { ...base, llm: savedLlm };
+    }
+    return base;
   });
 
   const setState = useCallback((updater) => {
@@ -202,7 +208,7 @@ function AppProvider({ children }) {
       });
       const ev = s.events.find((e) => e.id === eventId);
       const interactionDate = ev ? ev.start : new Date().toISOString();
-      const entry = { id: uid(), date: interactionDate, type: 'hangout', note: `Resolved from "${ev?.title}"` };
+      const entry = { id: uid(), date: interactionDate, type: 'hangout', title: ev?.title || '', note: `Resolved from "${ev?.title}"` };
       const contacts = s.contacts.map((c) => c.id === contactId
         ? {
           ...c,
@@ -229,7 +235,34 @@ function AppProvider({ children }) {
   const resolveEvent = useCallback((eventId) => {
     setState((s) => {
       const resolvedEventIds = [...(s.resolvedEventIds || []), eventId];
-      const updated = { ...s, resolvedEventIds };
+      const ev = s.events.find((e) => e.id === eventId);
+      const interactionDate = ev?.start || new Date().toISOString();
+
+      const matchedContactIds = new Set(
+        (ev?.guestEmails || []).reduce((acc, em) => {
+          const byEmail = s.contacts.find((c) => (c.email || '').toLowerCase() === em.toLowerCase());
+          if (byEmail) { acc.push(byEmail.id); return acc; }
+          const match = em.match(/^([^@]+)@contact\.local$/i);
+          if (match) {
+            const byId = s.contacts.find((c) => c.id === match[1]);
+            if (byId) acc.push(byId.id);
+          }
+          return acc;
+        }, [])
+      );
+
+      const contacts = matchedContactIds.size === 0 ? s.contacts : s.contacts.map((c) => {
+        if (!matchedContactIds.has(c.id)) return c;
+        const entry = { id: uid(), date: interactionDate, type: 'hangout', title: ev.title || '', note: `Logged from "${ev.title}"` };
+        return {
+          ...c,
+          interactions: [entry, ...c.interactions],
+          lastContactedAt: interactionDate,
+          lastContactedDaysAgo: daysSince(interactionDate),
+        };
+      });
+
+      const updated = { ...s, resolvedEventIds, contacts };
       if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
       return updated;
     });

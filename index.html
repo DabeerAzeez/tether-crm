@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tether — Personal CRM</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔗</text></svg>" />
+  <link rel="icon" type="image/png" href="assets/logo.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -93,7 +93,14 @@
         'src/drawer.jsx',
         'src/sidebar.jsx',
         'src/onboarding.jsx',
-        'src/tabs.jsx',
+        'src/tabs/shared.jsx',
+        'src/tabs/ReconnectTab.jsx',
+        'src/tabs/AllContactsTab.jsx',
+        'src/tabs/CalendarTab.jsx',
+        'src/tabs/MapTab.jsx',
+        'src/tabs/AskTab.jsx',
+        'src/tabs/HelpTab.jsx',
+        'src/tabs/SettingsTab.jsx',
         'src/app.jsx',
       ];
       for (const file of files) {

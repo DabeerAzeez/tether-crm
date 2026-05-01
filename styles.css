@@ -138,6 +138,7 @@ html, body, #root { height: 100%; }
   background: var(--warm-200);
 }
 .dark .leaflet-container { background: var(--warm-50); }
+.leaflet-tile-container { filter: grayscale(100%); }
 .leaflet-popup-content-wrap {
   border-radius: 12px;
   box-shadow: 0 8px 24px var(--shadow);

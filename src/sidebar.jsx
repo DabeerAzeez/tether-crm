@@ -132,9 +132,7 @@ function Sidebar() {
     <aside className={`w-60 shrink-0 border-r border-warm-200 bg-warm-50 flex flex-col ${isWalkthrough ? 'relative z-[60]' : ''}`}>
       <div className="p-5">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-sage-600 flex items-center justify-center">
-            <div className="text-warm-50">{Icons.logo}</div>
-          </div>
+          <img src="assets/logo.png" alt="Tether Logo" className="w-8 h-8 rounded-lg object-cover" />
           <span className="font-serif text-xl font-semibold text-warm-900">Tether</span>
         </div>
       </div>

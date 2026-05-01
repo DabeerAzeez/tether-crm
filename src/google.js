@@ -305,7 +305,11 @@
     const name = firstVal(p.names, 'displayName') || firstVal(p.nicknames, 'value') || '(no name)';
     const email = firstVal(p.emailAddresses);
     const phone = firstVal(p.phoneNumbers);
-    const photo = firstVal(p.photos, 'url');
+    const photoObj = p.photos && (p.photos.find((x) => x && x.metadata && x.metadata.primary) || p.photos[0]);
+    let photo = photoObj ? photoObj.url : '';
+    if (photo && photo.includes('googleusercontent.com/cm/')) {
+      photo = '';
+    }
     const bio = firstVal(p.biographies);
 
     const addrObj = (p.addresses && (p.addresses.find((a) => a.metadata && a.metadata.primary) || p.addresses[0])) || null;
@@ -526,6 +530,7 @@
       resolvedEventIds: driveData?.settings?.resolvedEventIds || [],
       dismissedEventIds: driveData?.settings?.dismissedEventIds || [],
       calendarKeywordBlacklist: driveData?.settings?.calendarKeywordBlacklist || [],
+      llm: driveData?.settings?.llm || null,
     };
   }
 

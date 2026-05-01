@@ -90,24 +90,26 @@ function ContactDrawer() {
   return (
     <>
       <div className="fixed inset-0 z-40 flex justify-end animate-fade-in" onClick={close}>
-        <div className="absolute inset-0 bg-warm-900/40 drawer-backdrop" />
+        <div className={`absolute inset-0 bg-warm-900/40 ${state.activeTab === 'map' ? '' : 'drawer-backdrop'}`} />
         <div className="relative w-full max-w-xl bg-warm-50 h-full overflow-y-auto shadow-2xl animate-slide-up flex flex-col" onClick={(e) => e.stopPropagation()}>
 
           {/* Header */}
           <div className="p-4 flex items-center justify-between border-b border-warm-200 bg-surface sticky top-0 z-10">
             <button onClick={close} className="p-2 text-warm-600 hover:bg-warm-100 rounded-full transition">{Icons.chevronLeft}</button>
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => updateContact(contact.id, { isFavorite: !contact.isFavorite })}
-                className={`p-2 rounded-full transition ${contact.isFavorite ? 'text-amber-500' : 'text-warm-600 hover:bg-warm-100'}`}
-                title={contact.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                {contact.isFavorite ? Icons.starFilled : Icons.star}
-              </button>
+              {!contact.isDeleted && (
+                <button
+                  onClick={() => updateContact(contact.id, { isFavorite: !contact.isFavorite })}
+                  className={`p-2 rounded-full transition ${contact.isFavorite ? 'text-amber-500' : 'text-warm-600 hover:bg-warm-100'}`}
+                  title={contact.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  {contact.isFavorite ? Icons.starFilled : Icons.star}
+                </button>
+              )}
               {contact.isDeleted ? (
                 <>
                   <button onClick={() => updateContact(contact.id, { isDeleted: false, deletedAt: null })} className="px-3 py-1.5 text-sm font-medium bg-sage-100 text-sage-700 hover:bg-sage-200 rounded-lg transition" title="Recover contact">Recover</button>
-                  <button onClick={() => setConfirmAction('deletePermanently')} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition" title="Delete permanently">{Icons.trash}</button>
+                  <button onClick={() => setConfirmAction('deletePermanently')} className="px-3 py-1.5 text-sm font-medium bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg transition" title="Delete permanently">Delete Forever</button>
                 </>
               ) : (
                 <>
@@ -297,23 +299,16 @@ function ContactDrawer() {
               <SectionHeader action={<Button size="sm" variant="ghost" icon={Icons.plus} onClick={() => openLog(contact.id)}>Add</Button>}>
                 Recent interactions
               </SectionHeader>
-              <div className="mt-4 space-y-4">
+              <div className="mt-3 space-y-1">
                 {contact.interactions.length === 0 ? (
                   <p className="text-sm text-warm-500 italic">No interactions logged yet.</p>
                 ) : (
-                  <div className="relative pl-3 border-l-2 border-warm-200 space-y-6">
-                    {contact.interactions.map((ix) => (
-                      <div key={ix.id} className="relative">
-                        <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-sage-400 border-[3px] border-surface" />
-                        <div className="text-xs text-warm-500 mb-1 flex justify-between">
-                          <span>{formatDate(ix.date)}</span>
-                          <span className="capitalize">{ix.type}</span>
-                        </div>
-                        {ix.note && <div className="text-sm text-warm-800 bg-warm-50 p-3 rounded-lg border border-warm-100">{ix.note}</div>}
-                        {ix.location && <div className="text-xs text-warm-600 mt-1 flex items-center gap-1"><span className="scale-75 opacity-70">{Icons.pin}</span>{ix.location}</div>}
-                      </div>
-                    ))}
-                  </div>
+                  contact.interactions.map((ix) => (
+                    <div key={ix.id} className="flex justify-between items-center text-sm">
+                      <span className="text-warm-600">{formatDate(ix.date)}</span>
+                      <span className="capitalize text-warm-500">{ix.title || ix.type}</span>
+                    </div>
+                  ))
                 )}
               </div>
             </Card>

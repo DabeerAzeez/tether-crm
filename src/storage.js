@@ -2,6 +2,7 @@
    Exposes window.TetherStorage for use by other modules. */
 
 const STORAGE_KEY = 'tether-state-v1';
+const LLM_KEY = 'tether-llm-v1';
 
 const defaultState = () => ({
   phase: 'signin', // signin | syncing | setup-mapping | setup-closefriends | walkthrough | dashboard
@@ -30,6 +31,18 @@ const defaultState = () => ({
   calendarKeywordBlacklist: [], // keyword strings; events whose titles match are ignored
 });
 
+const saveLlmConfig = (llm) => {
+  if (!llm) return;
+  try { localStorage.setItem(LLM_KEY, JSON.stringify(llm)); } catch (e) {}
+};
+
+const loadLlmConfig = () => {
+  try {
+    const raw = localStorage.getItem(LLM_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+};
+
 const loadState = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -37,8 +50,13 @@ const loadState = () => {
     return JSON.parse(raw);
   } catch (e) { return null; }
 };
+
 const saveState = (s) => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) {}
+  // LLM config saved separately so it survives sign-out (unlink wipes STORAGE_KEY but not LLM_KEY)
+  if (s.llm && (s.llm.apiKey || s.llm.connected || s.llm.model)) {
+    saveLlmConfig(s.llm);
+  }
 };
 
 // Geocode contacts that have a city/address but no lat/lng.
@@ -77,8 +95,11 @@ async function geocodeMissingLocations(contacts, onProgress) {
 
 window.TetherStorage = {
   STORAGE_KEY,
+  LLM_KEY,
   defaultState,
   loadState,
   saveState,
+  saveLlmConfig,
+  loadLlmConfig,
   geocodeMissingLocations,
 };

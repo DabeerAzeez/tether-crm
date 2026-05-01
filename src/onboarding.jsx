@@ -168,6 +168,7 @@ function SyncProgress() {
         let calendarKeywordBlacklist = [];
         let resolvedEventIds = [];
         let dismissedEventIds = [];
+        let llmFromDrive = null;
 
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
@@ -197,6 +198,7 @@ function SyncProgress() {
           calendarKeywordBlacklist = syncRes.calendarKeywordBlacklist || [];
           resolvedEventIds = syncRes.resolvedEventIds || [];
           dismissedEventIds = syncRes.dismissedEventIds || [];
+          llmFromDrive = syncRes.llm || null;
         } else {
           // Regular load from Drive
           const result = await window.TetherGoogle.loadFromDrive(({ label, pct }) => {
@@ -209,6 +211,7 @@ function SyncProgress() {
           calendarKeywordBlacklist = result.calendarKeywordBlacklist || [];
           resolvedEventIds = result.resolvedEventIds || [];
           dismissedEventIds = result.dismissedEventIds || [];
+          llmFromDrive = result.llm || null;
         }
 
         // Geocode any contacts missing coordinates
@@ -244,6 +247,7 @@ function SyncProgress() {
           calendarKeywordBlacklist: calendarKeywordBlacklist.length > 0 ? calendarKeywordBlacklist : s.calendarKeywordBlacklist,
           resolvedEventIds: resolvedEventIds.length > 0 ? resolvedEventIds : s.resolvedEventIds,
           dismissedEventIds: dismissedEventIds.length > 0 ? dismissedEventIds : s.dismissedEventIds,
+          ...(llmFromDrive && { llm: llmFromDrive }),
           isImporting: false,
           lastSyncAt: new Date().toISOString(),
           phase: 'dashboard',
@@ -468,7 +472,8 @@ const WALKTHROUGH_STEPS = [
   { tabKey: 'reconnect', title: 'Reconnect', body: "Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
   { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency.", position: 'top' },
   { tabKey: 'calendar', title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction.", position: 'top' },
-  { tabKey: 'help', title: 'Help', body: "Help has docs and a button to rerun this walkthrough.", position: 'bottom' },
+  { tabKey: 'trash', title: 'Trash', body: "Deleted contacts land here. Items are permanently removed after 30 days — or you can restore them anytime before that.", position: 'bottom' },
+  { tabKey: 'help', title: 'Help', body: "Help has shortcuts and a button to rerun this walkthrough.", position: 'bottom' },
   { tabKey: 'settings', title: 'Settings', body: "Settings is where you configure your theme, LLM, and sync options.", position: 'bottom' },
 ];
 
