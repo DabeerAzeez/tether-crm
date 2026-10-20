@@ -107,7 +107,7 @@
         try {
           const res = await fetch(file);
           const code = await res.text();
-          const output = Babel.transform(code, { presets: ['react'] });
+          const output = Babel.transform(code, { presets: [['react', { runtime: 'classic' }]] });
           const script = document.createElement('script');
           script.textContent = '(function(){\n' + output.code + '\n})();';
           document.head.appendChild(script);
