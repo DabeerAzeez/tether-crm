@@ -10,3 +10,5 @@ build/
 test-results/
 *.stackdump
 
+
+src/config.local.js
