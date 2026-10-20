@@ -7,6 +7,12 @@ const { useApp } = window.TetherContext;
 const { useDrawer } = window.TetherDrawer;
 const { relativeDate, labelsFor, colorFor } = window.TetherHelpers;
 
+// CARTO basemap tiles; key comes from src/config.js (CARTO_API_KEY) and removes the "API key required" watermark
+const cartoTileUrl = (style) => {
+  const key = window.TETHER_CONFIG?.CARTO_API_KEY;
+  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}.png${key ? `?key=${key}` : ''}`;
+};
+
 function MapTab() {
   const { state, updateContact, allLabels } = useApp();
   const { open: openDrawer, contactId } = useDrawer();
@@ -90,7 +96,7 @@ function MapTab() {
     const L = window.L;
     const hint = state.mapFocus || { lat: 20, lng: 10, zoom: 2 };
     const map = L.map(mapRef.current, { center: [hint.lat, hint.lng], zoom: hint.zoom, worldCopyJump: true });
-    const initTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19 });
+    const initTile = L.tileLayer(cartoTileUrl('light_all'), { attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19 });
     initTile.addTo(map);
     tileLayerRef.current = initTile;
     map.on('click', (e) => {
@@ -125,9 +131,7 @@ function MapTab() {
     const map = leafletRef.current;
     if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
     const isDark = state.theme === 'dark';
-    const tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+    const tileUrl = cartoTileUrl(isDark ? 'dark_all' : 'light_all');
     const tile = L.tileLayer(tileUrl, { attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19 });
     tile.addTo(map);
     tileLayerRef.current = tile;
@@ -294,7 +298,7 @@ function MapTab() {
     <div className="h-full flex" onClick={() => setSortOpen(false)}>
       {/* Map */}
       <div className="flex-1 relative">
-        <div ref={mapRef} className="absolute inset-0" />
+        <div ref={mapRef} className="absolute inset-0" style={{ position: 'absolute', inset: 0 }} />
         {!hintDismissed && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-amber-950 text-white px-4 py-2 rounded-xl text-sm shadow-lg">
             Click the map to drop a reference pin · click a bubble to open a contact
