@@ -305,7 +305,11 @@
     const name = firstVal(p.names, 'displayName') || firstVal(p.nicknames, 'value') || '(no name)';
     const email = firstVal(p.emailAddresses);
     const phone = firstVal(p.phoneNumbers);
-    const photo = firstVal(p.photos, 'url');
+    const photoObj = p.photos && (p.photos.find((x) => x && x.metadata && x.metadata.primary) || p.photos[0]);
+    let photo = photoObj ? photoObj.url : '';
+    if (photo && photo.includes('googleusercontent.com/cm/')) {
+      photo = '';
+    }
     const bio = firstVal(p.biographies);
 
     const addrObj = (p.addresses && (p.addresses.find((a) => a.metadata && a.metadata.primary) || p.addresses[0])) || null;
@@ -379,6 +383,47 @@
     return all;
   }
 
+  async function listAllCalendarEvents({ pastDays = 90, futureDays = 30 } = {}) {
+    const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString();
+    const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString();
+    
+    let calendars = [];
+    try {
+      const calendarsReq = await window.gapi.client.calendar.calendarList.list();
+      calendars = (calendarsReq.result.items || []).filter(cal => cal.accessRole === 'owner');
+    } catch (e) {
+      console.warn('[Tether] Could not list calendars, falling back to primary', e);
+      calendars = [{ id: 'primary', primary: true }];
+    }
+
+    const allEvents = new Map();
+    
+    for (const cal of calendars) {
+      let pageToken;
+      do {
+        try {
+          const r = await window.gapi.client.calendar.events.list({
+            calendarId: cal.id,
+            timeMin, timeMax,
+            showDeleted: false, singleEvents: true, orderBy: 'startTime', maxResults: 250, pageToken,
+          });
+          (r.result.items || []).forEach((e) => {
+            // Primary calendar events take precedence if IDs collide
+            if (!allEvents.has(e.id) || cal.primary) {
+              allEvents.set(e.id, e);
+            }
+          });
+          pageToken = r.result.nextPageToken;
+        } catch (e) {
+          // Non-fatal, some calendars might not be accessible
+          break;
+        }
+      } while (pageToken);
+    }
+    
+    return Array.from(allEvents.values());
+  }
+
   function eventToSimple(e) {
     const start = (e.start && (e.start.dateTime || e.start.date)) || '';
     const end = (e.end && (e.end.dateTime || e.end.date)) || '';
@@ -393,7 +438,10 @@
 
   function computeLastContacted(contacts, events) {
     const byEmail = {};
-    contacts.forEach((c) => { if (c.email) byEmail[c.email.toLowerCase()] = c.id; });
+    contacts.forEach((c) => {
+      if (c.email) byEmail[c.email.toLowerCase()] = c.id;
+      byEmail[`${c.id}@contact.local`.toLowerCase()] = c.id;
+    });
     const latest = {};
     events.forEach((e) => {
       if (!e.start) return;
@@ -463,7 +511,7 @@
     report('Fetching calendar…', 75);
     let events = [];
     try {
-      const rawEvents = await listEvents({ pastDays: 90, futureDays: 30 });
+      const rawEvents = await listAllCalendarEvents({ pastDays: 90, futureDays: 30 });
       events = rawEvents.map(eventToSimple);
     } catch (e) {
       console.warn('[Tether] Calendar fetch failed (non-fatal):', e);
@@ -479,6 +527,10 @@
     return {
       contacts, events, chatThreads,
       hasExistingData: !!(driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0),
+      resolvedEventIds: driveData?.settings?.resolvedEventIds || [],
+      dismissedEventIds: driveData?.settings?.dismissedEventIds || [],
+      calendarKeywordBlacklist: driveData?.settings?.calendarKeywordBlacklist || [],
+      llm: driveData?.settings?.llm || null,
     };
   }
 

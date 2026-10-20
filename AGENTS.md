@@ -9,17 +9,22 @@ Start the dev server and open the app in the browser to check for syntax errors 
 
 The full PRD is at `.agents/PRD.md`. Detailed TODO items are in `.resources/TODO.md` (gitignored).
 
-## Dev Server
+## Setup and Testing
 
 There is no build step. All dependencies load from CDN and JSX is transpiled in-browser by Babel standalone.
 
+### Dev Server Setup
 ```bash
 npx serve -l 8000
 ```
 
 Allowed ports for testing: 8000, 8001, 8002, 8003. Google OAuth requires an HTTPS origin in production, but localhost works for development.
 
-## Linting & Testing
+### Playwright
+
+Use Playwright MCP if available to test the app in the browser.
+
+### Linting & Vitest Tests
 
 To ensure code quality and correctness, run the following commands:
 
@@ -51,7 +56,14 @@ npm run test:watch
 | `drawer.jsx` | Contact detail side-panel and interaction logging modal |
 | `sidebar.jsx` | Navigation rail and unresolved attendee hints |
 | `onboarding.jsx` | Multi-step onboarding flow (`signin` → `syncing` → label mapping → close friends picker) |
-| `tabs.jsx` | All eight tab components (`AllContactsTab`, `ReconnectTab`, `AskTab`, etc.) |
+| `tabs/shared.jsx` | Shared components used across tabs: `ContactPickerModal` |
+| `tabs/ReconnectTab.jsx` | Reconnect tab: catch-up queue, nudge logic, `AddToCatchUpModal` |
+| `tabs/AllContactsTab.jsx` | All Contacts tab: list, search (AI + text), trash, `EditLabelsModal`, `ImportModal` |
+| `tabs/CalendarTab.jsx` | Calendar tab: event rows, guest picker, unresolved attendees, `AddManualEventModal` |
+| `tabs/MapTab.jsx` | Map tab: Leaflet map with contact pins by location |
+| `tabs/AskTab.jsx` | Ask tab: AI chat, `BotMessage` with interactive contact cards |
+| `tabs/HelpTab.jsx` | Help tab: keyboard shortcuts reference |
+| `tabs/SettingsTab.jsx` | Settings tab: LLM config, nudge intervals, calendar blacklist, danger zone |
 | `google.js` | Google API wrapper (`window.TetherGoogle`): OAuth, People API, Calendar API, Drive CRUD |
 | `storage.js` | `localStorage` persistence helpers and Nominatim geocoding |
 | `helpers.js` | Pure utility functions: date formatting, label management, contact scoring |

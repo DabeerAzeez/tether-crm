@@ -77,6 +77,19 @@ function SignInScreen() {
     }
   };
 
+  const tryDemo = () => {
+    const mock = window.TETHER_MOCK;
+    setState((s) => ({
+      ...s,
+      phase: 'syncing',
+      demoMode: true,
+      googleSignedIn: false,
+      googleProfile: mock.googleProfile,
+      contacts: mock.contacts,
+      events: mock.events,
+    }));
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-warm-50 via-warm-100 to-sage-100">
       <div className="flex flex-col items-center text-center max-w-md w-full gap-6">
@@ -110,6 +123,20 @@ function SignInScreen() {
             <span className="font-medium text-warm-900">{busy ? 'Connecting…' : 'Sign in with Google'}</span>
           </button>
           {err && <div className="text-sm text-red-700 text-center rounded-lg bg-red-50 border border-red-200 px-3 py-2">{err}</div>}
+
+          <div className="flex items-center gap-3 py-1">
+            <div className="flex-1 h-px bg-warm-200" />
+            <span className="text-xs text-warm-400">or</span>
+            <div className="flex-1 h-px bg-warm-200" />
+          </div>
+
+          <button
+            data-testid="try-demo-btn"
+            onClick={tryDemo}
+            className="w-full px-5 py-3 rounded-xl border border-warm-200 bg-warm-50 hover:bg-warm-100 text-warm-700 hover:text-warm-900 text-sm font-medium transition-all duration-200"
+          >
+            Try demo — no account needed
+          </button>
         </div>
 
         {/* Footer */}
@@ -138,6 +165,10 @@ function SyncProgress() {
 
         let contacts, events;
         let chatThreads = [];
+        let calendarKeywordBlacklist = [];
+        let resolvedEventIds = [];
+        let dismissedEventIds = [];
+        let llmFromDrive = null;
 
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
@@ -164,6 +195,10 @@ function SyncProgress() {
           const syncRes = await window.TetherGoogle.loadFromDrive(() => { });
           events = syncRes.events;
           chatThreads = syncRes.chatThreads || [];
+          calendarKeywordBlacklist = syncRes.calendarKeywordBlacklist || [];
+          resolvedEventIds = syncRes.resolvedEventIds || [];
+          dismissedEventIds = syncRes.dismissedEventIds || [];
+          llmFromDrive = syncRes.llm || null;
         } else {
           // Regular load from Drive
           const result = await window.TetherGoogle.loadFromDrive(({ label, pct }) => {
@@ -173,6 +208,10 @@ function SyncProgress() {
           contacts = result.contacts;
           events = result.events;
           chatThreads = result.chatThreads || [];
+          calendarKeywordBlacklist = result.calendarKeywordBlacklist || [];
+          resolvedEventIds = result.resolvedEventIds || [];
+          dismissedEventIds = result.dismissedEventIds || [];
+          llmFromDrive = result.llm || null;
         }
 
         // Geocode any contacts missing coordinates
@@ -205,6 +244,10 @@ function SyncProgress() {
           events,
           chatThreads: chatThreads.length > 0 ? chatThreads : (s.chatThreads || []),
           activeThreadId: chatThreads.length > 0 ? chatThreads[chatThreads.length - 1].id : s.activeThreadId,
+          calendarKeywordBlacklist: calendarKeywordBlacklist.length > 0 ? calendarKeywordBlacklist : s.calendarKeywordBlacklist,
+          resolvedEventIds: resolvedEventIds.length > 0 ? resolvedEventIds : s.resolvedEventIds,
+          dismissedEventIds: dismissedEventIds.length > 0 ? dismissedEventIds : s.dismissedEventIds,
+          ...(llmFromDrive && { llm: llmFromDrive }),
           isImporting: false,
           lastSyncAt: new Date().toISOString(),
           phase: 'dashboard',
@@ -429,7 +472,8 @@ const WALKTHROUGH_STEPS = [
   { tabKey: 'reconnect', title: 'Reconnect', body: "Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
   { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency.", position: 'top' },
   { tabKey: 'calendar', title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction.", position: 'top' },
-  { tabKey: 'help', title: 'Help', body: "Help has docs and a button to rerun this walkthrough.", position: 'bottom' },
+  { tabKey: 'trash', title: 'Trash', body: "Deleted contacts land here. Items are permanently removed after 30 days — or you can restore them anytime before that.", position: 'bottom' },
+  { tabKey: 'help', title: 'Help', body: "Help has shortcuts and a button to rerun this walkthrough.", position: 'bottom' },
   { tabKey: 'settings', title: 'Settings', body: "Settings is where you configure your theme, LLM, and sync options.", position: 'bottom' },
 ];
 

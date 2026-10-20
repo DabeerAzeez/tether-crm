@@ -101,6 +101,54 @@
     return messages.slice(messages.length - max);
   }
 
+  async function callLLM(llm, messages, ollamaOpts = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    try {
+      if (llm.provider === 'ollama' || llm.provider === 'other') {
+        const endpoint = (llm.endpoint || 'http://localhost:11434').replace(/\/$/, '');
+        const model = llm.model || 'llama3.2';
+        const res = await fetch(`${endpoint}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({ model, messages, stream: false, think: false, ...ollamaOpts }),
+        });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          throw new Error(`Ollama error ${res.status}${errText ? ': ' + errText.slice(0, 120) : ''}`);
+        }
+        const data = await res.json();
+        return data.message?.content || '';
+      }
+      if (llm.provider === 'gemini') {
+        const model = llm.model || 'gemini-2.0-flash';
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llm.apiKey}` },
+          signal: controller.signal,
+          body: JSON.stringify({ model, messages }),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          let detail = body;
+          try { detail = JSON.parse(body)?.error?.message || body; } catch { }
+          const friendly = res.status === 429
+            ? 'Rate limit hit — wait a moment and try again'
+            : res.status === 403
+              ? 'API key rejected — check it in Settings'
+              : detail.slice(0, 150) || `HTTP ${res.status}`;
+          throw new Error(`Gemini: ${friendly}`);
+        }
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || '';
+      }
+      throw new Error(`Provider "${llm.provider}" is not yet supported for chat.`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
     MULTI_COLOR,
     DEFAULT_LABEL_COLOR,
@@ -114,5 +162,6 @@
     importanceScore,
     generateThreadName,
     trimMessages,
+    callLLM,
   };
 }));

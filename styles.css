@@ -103,6 +103,28 @@
   --cat-multi: #b196d9;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   SEMANTIC THEME NOTES
+   All palette tokens are defined above in :root (light) and .dark (dark).
+   Key mapping between modes (warm scale inverts: 50↔900):
+     Light → Dark
+     --warm-50  #fbf8f4  ↔  --warm-900 #fbf8f4  (shell = primary text in dark)
+     --warm-100 #f4ede0  ↔  --warm-800 #e8dac1
+     --warm-900 #2e231b  ↔  --warm-50  #12100e  (near-black surface in dark)
+     --white    #ffffff  ↔  --white    #1c1916  (card surface)
+
+   Accessibility targets (WCAG AA):
+     Normal text (< 18px): ≥ 4.5 : 1
+     Large text (≥ 18px bold / ≥ 24px): ≥ 3 : 1
+
+   Danger / error UI:  light → text-red-700 (#b91c1c),  dark → text-red-400 (#f87171)
+   Warning / pending:  light → amber-900  (#78350f),    dark → amber-300  (#fcd34d)
+   Selected nav item:  light → warm-900 bg / warm-50 text,
+                       dark  → warm-300 bg (#3d3630) / warm-900 text (#fbf8f4)
+   Theme switcher:     light → warm-200 container / white active,
+                       dark  → warm-300 container / warm-500 active (#8c6a45)
+   ───────────────────────────────────────────────────────────────────────────── */
+
 html, body, #root { height: 100%; }
 
 /* Global transitions for theme switching */
@@ -116,6 +138,7 @@ html, body, #root { height: 100%; }
   background: var(--warm-200);
 }
 .dark .leaflet-container { background: var(--warm-50); }
+.leaflet-tile-container { filter: grayscale(100%); }
 .leaflet-popup-content-wrap {
   border-radius: 12px;
   box-shadow: 0 8px 24px var(--shadow);
