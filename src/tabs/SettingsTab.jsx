@@ -2,7 +2,7 @@
 
 const { useState } = React;
 const { Icons, RESERVED_LABELS, STORAGE_KEY } = window.TetherConstants;
-const { Avatar, Button, Card, LabelPill, Modal } = window.TetherComponents;
+const { Avatar, Button, Card, Modal } = window.TetherComponents;
 const { useApp } = window.TetherContext;
 const { defaultState } = window.TetherStorage;
 
@@ -13,30 +13,6 @@ function SettingsTab() {
   const [clearDataConfirm, setClearDataConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState('');
-
-  const updateNudges = (patch) => setState((s) => ({ ...s, nudges: { ...s.nudges, ...patch } }));
-
-  const updateBlacklist = (newList) => {
-    setState((s) => {
-      const next = { ...s, calendarKeywordBlacklist: newList };
-      if (!s.demoMode && window.TetherGoogle?.hasToken()) {
-        window.TetherGoogle.saveAppData({
-          contacts: next.contacts,
-          chatThreads: next.chatThreads || [],
-          settings: {
-            theme: next.theme,
-            llm: next.llm,
-            walkthroughDone: next.walkthroughDone,
-            calendarKeywordBlacklist: next.calendarKeywordBlacklist || [],
-            resolvedEventIds: next.resolvedEventIds || [],
-            dismissedEventIds: next.dismissedEventIds || [],
-          },
-          nudges: next.nudges,
-        }).catch((e) => console.error('[Tether] Blacklist save failed:', e));
-      }
-      return next;
-    });
-  };
 
   const [llmDraft, setLlmDraft] = useState({
     provider: state.llm?.provider || 'ollama',
@@ -179,7 +155,7 @@ function SettingsTab() {
     <div className="p-8 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="font-serif text-3xl text-warm-900">Settings</h1>
-        <p className="text-warm-600 mt-1">Account, appearance, LLM, calendar, and nudges.</p>
+        <p className="text-warm-600 mt-1">Account, appearance, LLM, and data.</p>
       </div>
 
       {/* Account */}
@@ -302,43 +278,6 @@ function SettingsTab() {
         <p className="text-xs text-warm-500">Settings are stored locally in your browser and sent only to the provider you configure.</p>
       </Card>
 
-      <Card className="p-6 space-y-4">
-        <h3 className="font-serif text-lg text-warm-900">Calendar Keyword Blacklist</h3>
-        <p className="text-sm text-warm-700">
-          Events with these key words in the title won't be pulled in from your calendars when you sync them to Tether — use this to stop pulling in irrelevant events like work or school so you can focus on intentional meetups.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {(state.calendarKeywordBlacklist || []).map((kw, i) => (
-            <div key={i} className="flex items-center gap-1.5 px-3 py-1 bg-warm-100 text-warm-900 text-sm rounded-full border border-warm-200">
-              <span>{kw}</span>
-              <button onClick={() => updateBlacklist(state.calendarKeywordBlacklist.filter((_, idx) => idx !== i))} className="text-warm-500 hover:text-warm-900 ml-1 leading-none">&times;</button>
-            </div>
-          ))}
-          {(state.calendarKeywordBlacklist || []).length === 0 && <span className="text-sm text-warm-500 italic">No keywords blacklisted.</span>}
-        </div>
-        <div className="flex gap-2">
-          <input
-            id="newKeywordInput"
-            className="flex-1 px-3 py-2 rounded-lg border border-warm-300 bg-surface text-sm"
-            placeholder="Add keyword..."
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.target.value.trim()) {
-                const val = e.target.value.trim();
-                updateBlacklist([...(state.calendarKeywordBlacklist || []), val]);
-                e.target.value = '';
-              }
-            }}
-          />
-          <Button size="sm" onClick={() => {
-            const input = document.getElementById('newKeywordInput');
-            if (input && input.value.trim()) {
-              updateBlacklist([...(state.calendarKeywordBlacklist || []), input.value.trim()]);
-              input.value = '';
-            }
-          }}>Add</Button>
-        </div>
-      </Card>
-
       {/* Transparency Portal */}
       <Card className="p-6 space-y-4">
         <h3 className="font-serif text-lg text-warm-900">Transparency Portal</h3>
@@ -354,9 +293,7 @@ function SettingsTab() {
                 theme: state.theme,
                 llm: state.llm,
                 walkthroughDone: state.walkthroughDone,
-                calendarKeywordBlacklist: state.calendarKeywordBlacklist || [],
               },
-              nudges: state.nudges,
               exportedAt: new Date().toISOString()
             };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -367,32 +304,6 @@ function SettingsTab() {
             a.click();
             URL.revokeObjectURL(url);
           }}>Export all data</Button>
-        </div>
-      </Card>
-
-      {/* Nudges */}
-      <Card className="p-6 space-y-4">
-        <h3 className="font-serif text-lg text-warm-900">Nudges</h3>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-warm-700">Default close-friend cadence:</span>
-          <input type="number" min="1" value={state.nudges.defaultCloseFriendDays}
-            onChange={(e) => updateNudges({ defaultCloseFriendDays: Number(e.target.value) })}
-            className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-surface" />
-          <span>days</span>
-        </div>
-        <div>
-          <div className="space-y-2">
-            {RESERVED_LABELS.map((c) => (
-              <div key={c.key} className="flex items-center gap-3">
-                <span className="flex-1"><LabelPill label={c} /></span>
-                <span className="text-xs text-warm-600">every</span>
-                <input type="number" min="0" value={state.nudges.groupCadence[c.key] || ''}
-                  onChange={(e) => updateNudges({ groupCadence: { ...state.nudges.groupCadence, [c.key]: e.target.value ? Number(e.target.value) : 0 } })}
-                  className="w-20 px-2 py-1 rounded-lg border border-warm-300 bg-surface text-sm" placeholder="off" />
-                <span className="text-xs text-warm-600">days</span>
-              </div>
-            ))}
-          </div>
         </div>
       </Card>
 
@@ -424,7 +335,7 @@ function SettingsTab() {
       <Modal open={clearDataConfirm} onClose={() => setClearDataConfirm(false)} title="Clear app-only data?" size="sm">
         <div className="p-6 space-y-4">
           <p className="text-sm text-warm-700">
-            This will clear your LLM keys, nudges, custom fields, and notes from your browser. Your Google Contacts and Calendar will remain untouched.
+            This will clear your LLM keys, custom fields, and notes from your browser. Your Google Contacts will remain untouched.
           </p>
           <div className="flex justify-end gap-3 pt-2">
             <Button size="sm" variant="ghost" onClick={() => setClearDataConfirm(false)}>Cancel</Button>

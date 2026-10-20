@@ -32,19 +32,6 @@ test('demo mode shows demo indicator in sidebar', async ({ page }) => {
   await expect(page.getByText('Demo mode')).toBeVisible();
 });
 
-test('reconnect tab shows overdue close friends', async ({ page }) => {
-  await page.getByTestId('try-demo-btn').click();
-
-  await expect(page.getByRole('button', { name: 'All Contacts' })).toBeVisible({ timeout: 10000 });
-
-  await page.getByRole('button', { name: 'Reconnect' }).click();
-
-  // Jordan is 78 days overdue (30-day nudge) — should appear in Reconnect
-  await expect(page.getByText('Jordan Reeves')).toBeVisible({ timeout: 5000 });
-  // Priya is 41 days overdue (30-day nudge)
-  await expect(page.getByText('Priya Shah')).toBeVisible();
-});
-
 test('exiting demo reloads to sign-in screen', async ({ page }) => {
   await page.getByTestId('try-demo-btn').click();
 

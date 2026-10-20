@@ -5,7 +5,7 @@ const { Icons } = window.TetherConstants;
 const { Avatar, Button, Card } = window.TetherComponents;
 const { useApp } = window.TetherContext;
 const { useDrawer } = window.TetherDrawer;
-const { relativeDate, labelsFor, colorFor } = window.TetherHelpers;
+const { labelsFor, colorFor } = window.TetherHelpers;
 
 // CARTO basemap tiles; key comes from src/config.js (CARTO_API_KEY) and removes the "API key required" watermark
 const cartoTileUrl = (style) => {
@@ -37,8 +37,6 @@ function MapTab() {
   const sortOptions = [
     { value: 'name', label: 'A → Z' },
     { value: 'closest', label: 'Closest first' },
-    { value: 'recent', label: 'Recently contacted' },
-    { value: 'stale', label: 'Least recently contacted' },
   ];
 
   if (state.contacts.length === 0) {
@@ -206,7 +204,7 @@ function MapTab() {
     const map = leafletRef.current;
     if (!map) return;
     if (circleRef.current) { map.removeLayer(circleRef.current); circleRef.current = null; }
-    if (droppedLatLng && sort !== 'closest' && sort !== 'name') {
+    if (droppedLatLng) {
       circleRef.current = L.circle([droppedLatLng.lat, droppedLatLng.lng], {
         radius: radiusKm * 1000,
         color: '#7db88f',
@@ -250,16 +248,11 @@ function MapTab() {
       if (cat) r = r.filter((c) => labelsFor(c).some(l => l.label === cat.label));
     }
     if (droppedLatLng) {
-      r = r.map((c) => ({ ...c, _dist: distKm(c.location, droppedLatLng) }));
-      if (sort === 'recent' || sort === 'stale') r = r.filter((x) => x._dist <= radiusKm);
+      r = r.map((c) => ({ ...c, _dist: distKm(c.location, droppedLatLng) })).filter((x) => x._dist <= radiusKm);
       if (sort === 'closest') r.sort((a, b) => a._dist - b._dist);
-      else if (sort === 'recent') r.sort((a, b) => (a.lastContactedDaysAgo ?? 9999) - (b.lastContactedDaysAgo ?? 9999));
-      else if (sort === 'stale') r.sort((a, b) => (b.lastContactedDaysAgo ?? 9999) - (a.lastContactedDaysAgo ?? 9999));
       else r.sort((a, b) => a.name.localeCompare(b.name));
     } else {
-      if (sort === 'recent') r = [...r].sort((a, b) => (a.lastContactedDaysAgo ?? 9999) - (b.lastContactedDaysAgo ?? 9999));
-      else if (sort === 'stale') r = [...r].sort((a, b) => (b.lastContactedDaysAgo ?? 9999) - (a.lastContactedDaysAgo ?? 9999));
-      else r = [...r].sort((a, b) => a.name.localeCompare(b.name));
+      r = [...r].sort((a, b) => a.name.localeCompare(b.name));
     }
     return r.slice(0, droppedLatLng ? 20 : 30);
   }, [state.contacts, allLabels, droppedLatLng, sort, radiusKm, filterKey]);
@@ -362,7 +355,7 @@ function MapTab() {
           </div>
 
           {/* Radius slider — only when pin is dropped and using a radius-based sort */}
-          {droppedLatLng && sort !== 'closest' && sort !== 'name' && (
+          {droppedLatLng && (
             <div>
               <label className="text-xs text-warm-700">Radius: {radiusKm} km</label>
               <input
@@ -418,7 +411,6 @@ function MapTab() {
                   <div className="text-xs text-warm-600 truncate">
                     {c.location.city}
                     {c._dist != null && ` · ${Math.round(c._dist)} km`}
-                    {` · ${relativeDate(c.lastContactedAt)}`}
                   </div>
                 </div>
               </button>

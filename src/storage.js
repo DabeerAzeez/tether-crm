@@ -9,26 +9,16 @@ const defaultState = () => ({
   googleSignedIn: false,
   googleProfile: null,
   contacts: [],
-  events: [],
   customLabels: [], // user-added CRM: labels
   theme: 'light', // light | dark
   activeTab: 'contacts',
   llm: { provider: 'ollama', apiKey: '', endpoint: 'http://localhost:11434', model: '', connected: false },
-  nudges: {
-    defaultCloseFriendDays: 30,
-    groupCadence: {}, // key -> days
-    emailDigest: false,
-  },
-  dismissedAttendeeIds: [],
   walkthroughDone: false,
   onboardingMappings: {}, // googleLabel -> crmKey
   selectedCloseFriendIds: [],
   isImporting: false,
   chatThreads: [],     // persisted to Drive — array of { id, name, createdAt, updatedAt, messages }
   activeThreadId: null, // currently selected thread in Ask tab
-  resolvedEventIds: [],        // event IDs the user has explicitly resolved
-  dismissedEventIds: [],       // event IDs dismissed (hidden) from the pending inbox
-  calendarKeywordBlacklist: [], // keyword strings; events whose titles match are ignored
 });
 
 const saveLlmConfig = (llm) => {

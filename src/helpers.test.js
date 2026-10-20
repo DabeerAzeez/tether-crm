@@ -142,13 +142,11 @@ describe('TetherHelpers', () => {
       const contact = {
         googleLabels: ['Contact'], // +2
         crmLabels: ['VIP'], // +5
-        nudgeFrequencyDays: 7, // +10
-        lastContactedAt: '2026-04-14T12:00:00Z', // 10 days ago (<30) = +5
         name: 'John', phone: '123', email: 'a@b.com', // +3
         location: 'NY' // +1
       };
-      // Total: 2 + 5 + 10 + 5 + 3 + 1 = 26
-      expect(helpers.importanceScore(contact)).toBe(26);
+      // Total: 2 + 5 + 3 + 1 = 11
+      expect(helpers.importanceScore(contact)).toBe(11);
     });
   });
 

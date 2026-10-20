@@ -71,10 +71,6 @@
     let s = 0;
     if (c.googleLabels.length > 0) s += 2;
     if (c.crmLabels.length > 0) s += 5;
-    if (c.nudgeFrequencyDays != null) s += 10;
-    const d = daysSince(c.lastContactedAt);
-    if (d < 30) s += 5;
-    else if (d < 90) s += 2;
     if (c.name && c.phone && c.email) s += 3;
     else if (c.email || c.phone) s += 1;
     if (c.location) s += 1;

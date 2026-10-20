@@ -8,7 +8,7 @@ const { loadState, saveState, defaultState, loadLlmConfig } = window.TetherStora
 const { loadClientId } = window.TetherConstants;
 
 // Helper re-imports from TetherHelpers (loaded via helpers.js)
-const { daysSince, uid, labelsFor, generateThreadName, trimMessages } = window.TetherHelpers;
+const { uid, labelsFor, generateThreadName, trimMessages } = window.TetherHelpers;
 
 const MAX_THREADS = 20;
 const MAX_PERSISTED_MESSAGES = 100;
@@ -56,11 +56,7 @@ function AppProvider({ children }) {
         theme: state.theme,
         llm: state.llm,
         walkthroughDone: state.walkthroughDone,
-        resolvedEventIds: state.resolvedEventIds || [],
-        dismissedEventIds: state.dismissedEventIds || [],
-        calendarKeywordBlacklist: state.calendarKeywordBlacklist || [],
       },
-      nudges: state.nudges,
     }).catch((e) => {
       console.error('[Tether] Drive save failed:', e);
     });
@@ -117,26 +113,10 @@ function AppProvider({ children }) {
     const iso = date || new Date().toISOString();
     const entry = { id: uid(), date: iso, type, note: note || '', location: location || '' };
     setState((s) => {
-      const contact = s.contacts.find((c) => c.id === contactId);
       const contacts = s.contacts.map((c) => c.id === contactId
-        ? {
-          ...c,
-          interactions: [entry, ...c.interactions],
-          lastContactedAt: iso,
-          lastContactedDaysAgo: daysSince(iso),
-        } : c);
-      // Also surface on Calendar tab as a synthetic "Personal CRM" event
-      const syntheticEvent = {
-        id: `log-${entry.id}`,
-        title: `${contact?.name || 'Contact'} — ${type}`,
-        start: iso, end: iso,
-        location: location || '',
-        description: note || '',
-        guestEmails: contact?.email ? [contact.email] : [],
-        synthetic: true,
-      };
+        ? { ...c, interactions: [entry, ...c.interactions] } : c);
       if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, contacts }), 0);
-      return { ...s, contacts, events: [syntheticEvent, ...s.events] };
+      return { ...s, contacts };
     });
   }, [setState, saveToDrive]);
 
@@ -170,128 +150,6 @@ function AppProvider({ children }) {
     });
     return res;
   }, [state.customLabels, state.contacts]);
-
-  // ── Event / attendee ops
-  const addGuestToEvent = useCallback((eventId, contactId) => {
-    setState((s) => {
-      const contact = s.contacts.find((c) => c.id === contactId);
-      if (!contact) return s;
-      const email = contact.email || `${contact.id}@contact.local`;
-      const events = s.events.map((e) => {
-        if (e.id !== eventId) return e;
-        const guestEmails = e.guestEmails.includes(email) ? e.guestEmails : [...e.guestEmails, email];
-        return { ...e, guestEmails };
-      });
-      return { ...s, events };
-    });
-  }, [setState]);
-
-  const removeGuestFromEvent = useCallback((eventId, email) => {
-    setState((s) => {
-      const events = s.events.map((e) => {
-        if (e.id !== eventId) return e;
-        const guestEmails = e.guestEmails.filter((em) => em.toLowerCase() !== email.toLowerCase());
-        return { ...e, guestEmails };
-      });
-      return { ...s, events };
-    });
-  }, [setState]);
-
-  const resolveEventAttendee = useCallback((eventId, contactId, hintFirstName) => {
-    setState((s) => {
-      const contact = s.contacts.find((c) => c.id === contactId);
-      const events = s.events.map((e) => {
-        if (e.id !== eventId) return e;
-        const email = contact?.email || `${contact?.id}@contact.local`;
-        const guestEmails = e.guestEmails.includes(email) ? e.guestEmails : [...e.guestEmails, email];
-        return { ...e, guestEmails, resolvedAt: new Date().toISOString() };
-      });
-      const ev = s.events.find((e) => e.id === eventId);
-      const interactionDate = ev ? ev.start : new Date().toISOString();
-      const entry = { id: uid(), date: interactionDate, type: 'hangout', title: ev?.title || '', note: `Resolved from "${ev?.title}"` };
-      const contacts = s.contacts.map((c) => c.id === contactId
-        ? {
-          ...c,
-          interactions: [entry, ...c.interactions],
-          lastContactedAt: interactionDate > (c.lastContactedAt || '') ? interactionDate : c.lastContactedAt,
-          lastContactedDaysAgo: Math.min(c.lastContactedDaysAgo, daysSince(interactionDate)),
-        } : c);
-      const dismissKey = hintFirstName ? `${eventId}:${hintFirstName.toLowerCase()}` : null;
-      const dismissedAttendeeIds = dismissKey && !s.dismissedAttendeeIds.includes(dismissKey)
-        ? [...s.dismissedAttendeeIds, dismissKey]
-        : s.dismissedAttendeeIds;
-      if (!s.demoMode) setTimeout(() => saveToDrive({ ...s, events, contacts, dismissedAttendeeIds }), 0);
-      return { ...s, events, contacts, dismissedAttendeeIds };
-    });
-  }, [setState, saveToDrive]);
-
-  const dismissAttendee = useCallback((eventId, name) => {
-    setState((s) => ({
-      ...s,
-      dismissedAttendeeIds: [...s.dismissedAttendeeIds, `${eventId}:${name.toLowerCase()}`],
-    }));
-  }, [setState]);
-
-  const resolveEvent = useCallback((eventId) => {
-    setState((s) => {
-      const resolvedEventIds = [...(s.resolvedEventIds || []), eventId];
-      const ev = s.events.find((e) => e.id === eventId);
-      const interactionDate = ev?.start || new Date().toISOString();
-
-      const matchedContactIds = new Set(
-        (ev?.guestEmails || []).reduce((acc, em) => {
-          const byEmail = s.contacts.find((c) => (c.email || '').toLowerCase() === em.toLowerCase());
-          if (byEmail) { acc.push(byEmail.id); return acc; }
-          const match = em.match(/^([^@]+)@contact\.local$/i);
-          if (match) {
-            const byId = s.contacts.find((c) => c.id === match[1]);
-            if (byId) acc.push(byId.id);
-          }
-          return acc;
-        }, [])
-      );
-
-      const contacts = matchedContactIds.size === 0 ? s.contacts : s.contacts.map((c) => {
-        if (!matchedContactIds.has(c.id)) return c;
-        const entry = { id: uid(), date: interactionDate, type: 'hangout', title: ev.title || '', note: `Logged from "${ev.title}"` };
-        return {
-          ...c,
-          interactions: [entry, ...c.interactions],
-          lastContactedAt: interactionDate,
-          lastContactedDaysAgo: daysSince(interactionDate),
-        };
-      });
-
-      const updated = { ...s, resolvedEventIds, contacts };
-      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
-      return updated;
-    });
-  }, [setState, saveToDrive]);
-
-  const dismissEvent = useCallback((eventId) => {
-    setState((s) => {
-      const dismissedEventIds = [...(s.dismissedEventIds || []), eventId];
-      const updated = { ...s, dismissedEventIds };
-      if (!s.demoMode) setTimeout(() => saveToDrive(updated), 0);
-      return updated;
-    });
-  }, [setState, saveToDrive]);
-
-  const addManualEvent = useCallback((title, date, contactIds) => {
-    setState((s) => {
-      const start = new Date(date).toISOString();
-      const newEvent = {
-        id: `manual-${uid()}`,
-        title,
-        start, end: start, location: '', description: 'Manually added past event',
-        guestEmails: contactIds.map(id => s.contacts.find(c => c.id === id)?.email).filter(Boolean),
-        synthetic: true,
-      };
-      const events = [newEvent, ...s.events].sort((a, b) => new Date(b.start) - new Date(a.start));
-      // NOTE: Manual events are only kept in memory during the session as per PRD unless added to settings.
-      return { ...s, events };
-    });
-  }, [setState]);
 
   const addCustomLabel = useCallback((label, color) => {
     const key = label.replace(/^CRM:\s*/, '').toLowerCase().replace(/\s+/g, '-');
@@ -440,9 +298,6 @@ function AppProvider({ children }) {
     state, setState,
     updateContact, deleteContactPermanently, addCrmLabelToContact, removeCrmLabelFromContact,
     logInteraction, logInteractionMany,
-    resolveEventAttendee, dismissAttendee,
-    resolveEvent, dismissEvent, addManualEvent,
-    addGuestToEvent, removeGuestFromEvent,
     addCustomLabel, renameLabel, deleteLabel, setTheme,
     allLabels,
     createThread, deleteThread, renameThread, appendMessage, setActiveThread,

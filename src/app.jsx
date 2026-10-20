@@ -7,7 +7,7 @@ const { AppProvider, useApp } = window.TetherContext;
 const { DrawerProvider } = window.TetherDrawer;
 const { Sidebar } = window.TetherSidebar;
 const { SignInScreen, SyncProgress, LabelMappingScreen, CloseFriendPicker, WalkthroughOverlay, SkippedWalkthroughToast } = window.TetherOnboarding;
-const { ReconnectTab, AllContactsTab, CalendarTab, MapTab, AskTab, HelpTab, SettingsTab } = window.TetherTabs;
+const { AllContactsTab, MapTab, AskTab, HelpTab, SettingsTab } = window.TetherTabs;
 
 // ───────────────────────────────────────────────────────────────────
 // DASHBOARD
@@ -17,10 +17,8 @@ function Dashboard() {
   const { state } = useApp();
 
   const tabs = {
-    reconnect: <ReconnectTab />,
     ask: <AskTab />,
     map: <MapTab />,
-    calendar: <CalendarTab />,
     contacts: <AllContactsTab />,
     trash: <AllContactsTab />,
     help: <HelpTab />,
@@ -31,7 +29,7 @@ function Dashboard() {
     <div className="h-screen flex bg-warm-50">
       <Sidebar />
       <main className="flex-1 overflow-y-auto relative z-0">
-        {tabs[state.activeTab] || <ReconnectTab />}
+        {tabs[state.activeTab] || <AllContactsTab />}
       </main>
     </div>
   );
@@ -51,7 +49,7 @@ function Root() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
       if (e.key === 'g') { pending = 'g'; setTimeout(() => { pending = null; }, 700); return; }
       if (pending === 'g') {
-        const map = { r: 'reconnect', a: 'ask', m: 'map', c: 'calendar' };
+        const map = { a: 'ask', m: 'map', c: 'contacts' };
         if (map[e.key]) {
           document.dispatchEvent(new CustomEvent('tether-tab', { detail: map[e.key] }));
         }

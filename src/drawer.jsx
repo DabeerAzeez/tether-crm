@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo, useRef, createContext, useContext } = Reac
 const { Icons } = window.TetherConstants;
 const { Avatar, Button, Card, LabelPill, Tag, LabelMenu, SectionHeader, Modal, LocationAutocomplete } = window.TetherComponents;
 const { useApp } = window.TetherContext;
-const { daysSince, formatDate, relativeDate, labelsFor, colorFor } = window.TetherHelpers;
+const { formatDate, labelsFor, colorFor } = window.TetherHelpers;
 
 // ───────────────────────────────────────────────────────────────────
 // DRAWER CONTEXT
@@ -60,7 +60,6 @@ function ContactDrawer() {
       name: draft.name, email: draft.email, phone: draft.phone,
       websites: draft.websites,
       notes: draft.notes, custom: draft.custom,
-      nudgeFrequencyDays: draft.nudgeFrequencyDays,
       location: draft.location,
     };
 
@@ -281,16 +280,6 @@ function ContactDrawer() {
                   ) : (
                     <div className="note text-sm text-warm-800 leading-relaxed whitespace-pre-wrap">{contact.notes || '—'}</div>
                   )}
-                </div>
-
-                <div className="pt-4 border-t border-warm-100 flex items-center gap-3 text-sm">
-                  <span className="text-warm-600">Remind me every</span>
-                  {edit ? (
-                    <input type="number" min="0" value={draft.nudgeFrequencyDays || ''}
-                      onChange={(e) => setDraft({ ...draft, nudgeFrequencyDays: e.target.value ? Number(e.target.value) : null })}
-                      className="w-20 px-2 py-1.5 rounded-lg border border-warm-300 bg-surface" />
-                  ) : <span className="font-medium text-warm-900">{contact.nudgeFrequencyDays || '—'}</span>}
-                  <span className="text-warm-600">days</span>
                 </div>
               </div>
             </Card>
