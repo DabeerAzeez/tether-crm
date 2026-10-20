@@ -7,7 +7,7 @@ const { Icons, RESERVED_LABELS, RESERVED_CATEGORIES, loadClientId } = window.Tet
 const { Avatar, Button, Card, Tag, LabelPill } = window.TetherComponents;
 const { useApp } = window.TetherContext;
 const { geocodeMissingLocations } = window.TetherStorage;
-const { daysSince, importanceScore } = window.TetherHelpers;
+const { importanceScore } = window.TetherHelpers;
 
 // ───────────────────────────────────────────────────────────────────
 // ONBOARDING SHELL
@@ -86,7 +86,6 @@ function SignInScreen() {
       googleSignedIn: false,
       googleProfile: mock.googleProfile,
       contacts: mock.contacts,
-      events: mock.events,
     }));
   };
 
@@ -163,18 +162,14 @@ function SyncProgress() {
       try {
         setErr('');
 
-        let contacts, events;
+        let contacts;
         let chatThreads = [];
-        let calendarKeywordBlacklist = [];
-        let resolvedEventIds = [];
-        let dismissedEventIds = [];
         let llmFromDrive = null;
 
         if (state.demoMode) {
           // Demo: animate fake progress then use already-loaded mock data
           const steps = [
             [25, 'Loading demo contacts…'],
-            [60, 'Fetching demo calendar…'],
             [90, 'Computing importance ranking…'],
             [100, 'Done'],
           ];
@@ -183,7 +178,6 @@ function SyncProgress() {
             await new Promise((r) => setTimeout(r, 350));
           }
           contacts = state.contacts;
-          events = state.events;
         } else if (state.isImporting) {
           // Manual import from Google Contacts
           const resultContacts = await window.TetherGoogle.importContactsFromGoogle(({ label, pct }) => {
@@ -191,13 +185,9 @@ function SyncProgress() {
             setStage(label);
           });
           contacts = resultContacts;
-          // Refresh events too
+          // Refresh chat threads and settings too
           const syncRes = await window.TetherGoogle.loadFromDrive(() => { });
-          events = syncRes.events;
           chatThreads = syncRes.chatThreads || [];
-          calendarKeywordBlacklist = syncRes.calendarKeywordBlacklist || [];
-          resolvedEventIds = syncRes.resolvedEventIds || [];
-          dismissedEventIds = syncRes.dismissedEventIds || [];
           llmFromDrive = syncRes.llm || null;
         } else {
           // Regular load from Drive
@@ -206,11 +196,7 @@ function SyncProgress() {
             setStage(label);
           });
           contacts = result.contacts;
-          events = result.events;
           chatThreads = result.chatThreads || [];
-          calendarKeywordBlacklist = result.calendarKeywordBlacklist || [];
-          resolvedEventIds = result.resolvedEventIds || [];
-          dismissedEventIds = result.dismissedEventIds || [];
           llmFromDrive = result.llm || null;
         }
 
@@ -241,12 +227,8 @@ function SyncProgress() {
         setState((s) => ({
           ...s,
           contacts,
-          events,
           chatThreads: chatThreads.length > 0 ? chatThreads : (s.chatThreads || []),
           activeThreadId: chatThreads.length > 0 ? chatThreads[chatThreads.length - 1].id : s.activeThreadId,
-          calendarKeywordBlacklist: calendarKeywordBlacklist.length > 0 ? calendarKeywordBlacklist : s.calendarKeywordBlacklist,
-          resolvedEventIds: resolvedEventIds.length > 0 ? resolvedEventIds : s.resolvedEventIds,
-          dismissedEventIds: dismissedEventIds.length > 0 ? dismissedEventIds : s.dismissedEventIds,
           ...(llmFromDrive && { llm: llmFromDrive }),
           isImporting: false,
           lastSyncAt: new Date().toISOString(),
@@ -333,11 +315,7 @@ function LabelMappingScreen() {
           if (cat && !c.crmLabels.includes(cat.label)) additions.push(cat.label);
         });
         const crmLabels = [...c.crmLabels, ...additions];
-        const isClose = crmLabels.includes('CRM: Close Friends');
-        const nudgeFrequencyDays = isClose && c.nudgeFrequencyDays == null
-          ? s.nudges.defaultCloseFriendDays
-          : c.nudgeFrequencyDays;
-        return { ...c, crmLabels, nudgeFrequencyDays };
+        return { ...c, crmLabels };
       });
       const anyClose = contacts.some((c) => c.crmLabels.includes('CRM: Close Friends'));
       return {
@@ -419,15 +397,14 @@ function CloseFriendPicker() {
         let crmLabels = c.crmLabels;
         if (shouldHave && !hasLabel) crmLabels = [...crmLabels, 'CRM: Close Friends'];
         if (!shouldHave && hasLabel) crmLabels = crmLabels.filter((l) => l !== 'CRM: Close Friends');
-        const nudgeFrequencyDays = shouldHave ? (c.nudgeFrequencyDays || s.nudges.defaultCloseFriendDays) : c.nudgeFrequencyDays;
-        return { ...c, crmLabels, nudgeFrequencyDays };
+        return { ...c, crmLabels };
       });
       return { ...s, contacts, selectedCloseFriendIds: ids, phase: 'walkthrough' };
     });
   };
 
   return (
-    <OnboardingShell step={3} title="Pick your close friends" subtitle="The more you add, the more nudges you'll get — pick as many as you can realistically keep up with. You can always change this later.">
+    <OnboardingShell step={3} title="Pick your close friends" subtitle="Pick the people you're closest to. You can always change this later.">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto pr-1">
         {ranked.map((c) => {
           const isOn = selected.has(c.id);
@@ -469,9 +446,7 @@ function CloseFriendPicker() {
 
 const WALKTHROUGH_STEPS = [
   { tabKey: 'contacts', title: 'All Contacts', body: "All your contacts live here. Import from Google Contacts (or other sources) using the Import button. You can also manage labels and filter from this tab.", position: 'top' },
-  { tabKey: 'reconnect', title: 'Reconnect', body: "Close friends you haven't contacted in a while surface here, alongside group check-ins and recent activity.", position: 'top' },
-  { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance or recency.", position: 'top' },
-  { tabKey: 'calendar', title: 'Calendar', body: "Syncs with Google Calendar. Question-mark chips flag events where we suspect a contact was there — one click resolves them and logs the interaction.", position: 'top' },
+  { tabKey: 'map', title: 'Map', body: "Every contact with a location is pinned. Drop a pin anywhere to find who's nearby, sorted by distance.", position: 'top' },
   { tabKey: 'trash', title: 'Trash', body: "Deleted contacts land here. Items are permanently removed after 30 days — or you can restore them anytime before that.", position: 'bottom' },
   { tabKey: 'help', title: 'Help', body: "Help has shortcuts and a button to rerun this walkthrough.", position: 'bottom' },
   { tabKey: 'settings', title: 'Settings', body: "Settings is where you configure your theme, LLM, and sync options.", position: 'bottom' },

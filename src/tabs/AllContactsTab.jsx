@@ -5,7 +5,7 @@ const { Icons } = window.TetherConstants;
 const { Avatar, Button, Card, LabelPill, Modal, LabelFilter } = window.TetherComponents;
 const { useApp } = window.TetherContext;
 const { useDrawer } = window.TetherDrawer;
-const { daysSince, relativeDate, labelsFor, importanceScore, callLLM } = window.TetherHelpers;
+const { relativeDate, labelsFor, importanceScore, callLLM } = window.TetherHelpers;
 
 function EditLabelsModal({ open, onClose }) {
   const { allLabels, renameLabel, deleteLabel, addCustomLabel } = useApp();
@@ -281,12 +281,6 @@ function AllContactsTab() {
 
       return valA.localeCompare(valB) * dir;
     });
-    if (sort === 'lastContacted') r.sort((a, b) => {
-      const valA = daysSince(a.lastContactedAt);
-      const valB = daysSince(b.lastContactedAt);
-      if (valA === valB) return a.name.localeCompare(b.name) * dir;
-      return (valA - valB) * dir;
-    });
     if (sort === 'deletedAt') r.sort((a, b) => {
       const valA = a.deletedAt || 0;
       const valB = b.deletedAt || 0;
@@ -419,9 +413,6 @@ function AllContactsTab() {
                     <th className="text-left py-4 px-4 font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('name')}>
                       Name{sortArrow('name')}
                     </th>
-                    <th className="text-left py-4 px-4 hidden md:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('lastContacted')}>
-                      Last contacted{sortArrow('lastContacted')}
-                    </th>
                     <th className="text-left py-4 px-4 hidden md:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('deletedAt')}>
                       Date deleted{sortArrow('deletedAt')}
                     </th>
@@ -437,9 +428,6 @@ function AllContactsTab() {
                     </th>
                     <th className="text-left py-4 px-4 hidden lg:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('location')}>
                       Location{sortArrow('location')}
-                    </th>
-                    <th className="text-left py-4 px-4 hidden md:table-cell font-normal cursor-pointer hover:bg-warm-50 select-none" onClick={() => handleSort('lastContacted')}>
-                      Last contacted{sortArrow('lastContacted')}
                     </th>
                   </tr>
                 )}
@@ -463,7 +451,6 @@ function AllContactsTab() {
                               </div>
                             </div>
                           </td>
-                          <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
                           <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{c.deletedAt ? relativeDate(c.deletedAt) : '—'}</td>
                           <td className="py-3 px-2 w-1" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1 justify-end">
@@ -503,12 +490,11 @@ function AllContactsTab() {
                           </div>
                         </td>
                         <td className="py-3 px-4 hidden lg:table-cell text-sm text-warm-700">{c.location ? `${c.location.city}, ${c.location.country}` : '—'}</td>
-                        <td className="py-3 px-4 hidden md:table-cell text-sm text-warm-700">{relativeDate(c.lastContactedAt)}</td>
                       </tr>
                     );
                   };
 
-                  const colSpan = isTrashMode ? 4 : 4;
+                  const colSpan = 3;
                   return (
                     <>
                       {favorites.length > 0 && (

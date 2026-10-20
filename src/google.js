@@ -1,13 +1,13 @@
 /* Tether — Google integration (OAuth, People API read-only seed, Drive appData storage).
    Exposes window.TetherGoogle. No backend. Uses Google Identity Services (token flow)
    plus gapi.client for API calls. Requires a Google OAuth 2.0 Web Client ID with:
-     • People API + Google Calendar API + Google Drive API enabled
+     • People API + Google Drive API enabled
      • The current origin added to "Authorized JavaScript origins"
 
    Storage model (v2):
      App data is persisted in a structured JSON file in the user's hidden
      Google Drive appDataFolder (invisible to the user, not deletable from Drive UI):
-       tether_data_v2.json   — { version:2, contacts, chatThreads, settings, nudges }
+       tether_data_v2.json   — { version:2, contacts, chatThreads, settings }
      Legacy v1 file (tether_contacts_v1.json) is read on first load for migration.
      On first sign-in, contacts are seeded from Google People API (read-only).
      All subsequent saves go only to the v2 Drive file — People API is never written to.
@@ -16,11 +16,9 @@
 (function () {
   const DISCOVERY_DOCS = [
     'https://people.googleapis.com/$discovery/rest?version=v1',
-    'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
   ];
   const SCOPES = [
     'https://www.googleapis.com/auth/contacts.readonly',
-    'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/drive.appdata',
     'openid', 'profile', 'email',
   ].join(' ');
@@ -356,140 +354,20 @@
       },
       skills: [],
       interactions: [],
-      lastContactedAt: null,
-      lastContactedDaysAgo: Infinity,
-      nudgeFrequencyDays: null,
       avatar: { initials, hue },
       photoUrl: photo,
     };
   }
 
-  // ─── Calendar ────────────────────────────────────────────────────
-
-  async function listEvents({ pastDays = 90, futureDays = 30 } = {}) {
-    const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString();
-    const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString();
-    const all = [];
-    let pageToken;
-    do {
-      const r = await window.gapi.client.calendar.events.list({
-        calendarId: 'primary',
-        timeMin, timeMax,
-        showDeleted: false, singleEvents: true, orderBy: 'startTime', maxResults: 250, pageToken,
-      });
-      (r.result.items || []).forEach((e) => all.push(e));
-      pageToken = r.result.nextPageToken;
-    } while (pageToken);
-    return all;
-  }
-
-  async function listAllCalendarEvents({ pastDays = 90, futureDays = 30 } = {}) {
-    const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString();
-    const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString();
-    
-    let calendars = [];
-    try {
-      const calendarsReq = await window.gapi.client.calendar.calendarList.list();
-      calendars = (calendarsReq.result.items || []).filter(cal => cal.accessRole === 'owner');
-    } catch (e) {
-      console.warn('[Tether] Could not list calendars, falling back to primary', e);
-      calendars = [{ id: 'primary', primary: true }];
-    }
-
-    const allEvents = new Map();
-    
-    for (const cal of calendars) {
-      let pageToken;
-      do {
-        try {
-          const r = await window.gapi.client.calendar.events.list({
-            calendarId: cal.id,
-            timeMin, timeMax,
-            showDeleted: false, singleEvents: true, orderBy: 'startTime', maxResults: 250, pageToken,
-          });
-          (r.result.items || []).forEach((e) => {
-            // Primary calendar events take precedence if IDs collide
-            if (!allEvents.has(e.id) || cal.primary) {
-              allEvents.set(e.id, e);
-            }
-          });
-          pageToken = r.result.nextPageToken;
-        } catch (e) {
-          // Non-fatal, some calendars might not be accessible
-          break;
-        }
-      } while (pageToken);
-    }
-    
-    return Array.from(allEvents.values());
-  }
-
-  function eventToSimple(e) {
-    const start = (e.start && (e.start.dateTime || e.start.date)) || '';
-    const end = (e.end && (e.end.dateTime || e.end.date)) || '';
-    return {
-      id: e.id, title: e.summary || '(no title)', start, end,
-      location: e.location || '', description: e.description || '',
-      guestEmails: (e.attendees || []).map((a) => a.email).filter(Boolean),
-      organizerEmail: (e.organizer && e.organizer.email) || '',
-      htmlLink: e.htmlLink || '', synthetic: false,
-    };
-  }
-
-  function computeLastContacted(contacts, events) {
-    const byEmail = {};
-    contacts.forEach((c) => {
-      if (c.email) byEmail[c.email.toLowerCase()] = c.id;
-      byEmail[`${c.id}@contact.local`.toLowerCase()] = c.id;
-    });
-    const latest = {};
-    events.forEach((e) => {
-      if (!e.start) return;
-      (e.guestEmails || []).forEach((em) => {
-        const id = byEmail[em.toLowerCase()];
-        if (!id) return;
-        if (!latest[id] || e.start > latest[id]) latest[id] = e.start;
-      });
-    });
-    const now = Date.now();
-    return contacts.map((c) => {
-      const iso = latest[c.id];
-      if (!iso) return c;
-      // Only update if calendar event is more recent than logged interactions
-      if (c.lastContactedAt && c.lastContactedAt >= iso) return c;
-      const days = Math.floor((now - new Date(iso).getTime()) / 86400000);
-      return { ...c, lastContactedAt: iso, lastContactedDaysAgo: Math.max(0, days) };
-    });
-  }
-
-  function resolveBirthdayAttendees(contacts, events) {
-    const byNameLower = {};
-    contacts.forEach((c) => {
-      const key = c.name.toLowerCase();
-      if (!byNameLower[key]) byNameLower[key] = [];
-      byNameLower[key].push(c);
-    });
-    return events.map((e) => {
-      const m = e.title.match(/^(.+?)'s\s+birthday$/i);
-      if (!m) return e;
-      const matches = byNameLower[m[1].trim().toLowerCase()] || [];
-      if (matches.length !== 1) return e;
-      const ref = matches[0].email || `${matches[0].id}@contact.local`;
-      if (e.guestEmails.includes(ref)) return e;
-      return { ...e, guestEmails: [...e.guestEmails, ref] };
-    });
-  }
-
   // ─── Main sync ───────────────────────────────────────────────────
 
   /**
-   * loadFromDrive: loads app state from Drive appDataFolder + Google Calendar.
+   * loadFromDrive: loads app state from Drive appDataFolder.
    *
    * Strategy:
    *   1. Try to read tether_data_v2.json, falling back to tether_contacts_v1.json.
    *   2. If found → use stored contacts (and chatThreads if v2) as source of truth.
    *   3. If NOT found → return empty. Do NOT auto-import Google Contacts.
-   *   4. Always fetch Calendar fresh for event cross-referencing.
    */
   async function loadFromDrive(onProgress) {
     const report = (label, pct) => { if (onProgress) onProgress({ label, pct }); };
@@ -507,29 +385,10 @@
       report('No existing data found — starting fresh…', 60);
     }
 
-    // Calendar is always fetched fresh
-    report('Fetching calendar…', 75);
-    let events = [];
-    try {
-      const rawEvents = await listAllCalendarEvents({ pastDays: 90, futureDays: 30 });
-      events = rawEvents.map(eventToSimple);
-    } catch (e) {
-      console.warn('[Tether] Calendar fetch failed (non-fatal):', e);
-    }
-
-    if (contacts.length > 0) {
-      report('Cross-referencing attendees…', 90);
-      contacts = computeLastContacted(contacts, events);
-      events = resolveBirthdayAttendees(contacts, events);
-    }
-
     report('Done', 100);
     return {
-      contacts, events, chatThreads,
+      contacts, chatThreads,
       hasExistingData: !!(driveData && Array.isArray(driveData.contacts) && driveData.contacts.length > 0),
-      resolvedEventIds: driveData?.settings?.resolvedEventIds || [],
-      dismissedEventIds: driveData?.settings?.dismissedEventIds || [],
-      calendarKeywordBlacklist: driveData?.settings?.calendarKeywordBlacklist || [],
       llm: driveData?.settings?.llm || null,
     };
   }
@@ -578,7 +437,6 @@
       contacts: payload.contacts || [],
       chatThreads: payload.chatThreads || [],
       settings: payload.settings || {},
-      nudges: payload.nudges || {},
     };
     await writeAppData(data);
   }
@@ -588,14 +446,13 @@
    * Kept for backward compatibility.
    */
   async function saveContacts(contacts) {
-    // Read existing data to preserve chatThreads / settings / nudges
+    // Read existing data to preserve chatThreads / settings
     let existing = null;
     try { existing = await readAppData(); } catch (e) { /* proceed with contacts only */ }
     await saveAppData({
       contacts,
       chatThreads: (existing && existing.chatThreads) || [],
       settings: (existing && existing.settings) || {},
-      nudges: (existing && existing.nudges) || {},
     });
   }
 
